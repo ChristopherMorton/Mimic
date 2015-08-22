@@ -21,6 +21,11 @@ var img_pl_closed_s = new Image();
 var img_pl_idle_w1 = new Image();
 var img_pl_idle_w2 = new Image();
 var img_pl_closed_w = new Image();
+
+var img_enemy_n = new Image();
+var img_enemy_e = new Image();
+var img_enemy_s = new Image();
+var img_enemy_w = new Image();
 /*
 var wallN_image = new Image();
 var wallE_image = new Image();
@@ -130,6 +135,8 @@ function MapLoc( t ) {
    this.t = t;
 
    this.unit = undefined;
+
+   this.visible = true;
 }
 
 /////////////////////////////////////////////////////////////////////
@@ -147,6 +154,14 @@ var HOP_DURATION = 250;
 var map;
 var MAP_WIDTH = 40, MAP_HEIGHT = 40;
 
+
+// Units --
+
+var enemies = [];
+
+/////////////////////////////////////////////////////////////////////
+// Map ---
+
 function initMap( mapfile )
 {
    map = new Array( MAP_WIDTH );
@@ -159,6 +174,9 @@ function initMap( mapfile )
 
    drawPaths();
 
+   var e1 = addEnemy( 2, 4, 1 );
+   enemyCreatePath( e1, 8, 4, 3, 2, 4, 1 );
+   e1.state = 'hop';
    //calculateEdges();
 
 }
@@ -169,6 +187,10 @@ function drawPaths()
    map[1][1].t = 0;
    map[1][2].t = 0;
    map[1][3].t = 0;
+
+   for (var i = 1; i <= 17; ++i) {
+      map[i][4].t = 0;
+   }
 }
 
 /*
@@ -210,10 +232,10 @@ function calculateEdges()
 }
 */
 
-// Units --
+function calculateVision()
+{
 
-// 
-
+}
 
 /////////////////////////////////////////////////////////////////////
 // Player ---
@@ -224,6 +246,8 @@ var player_offset_x = 0, player_offset_y = 0;
 var player_facing = 2; // 0-N, 1-E, 2-S, 3-W;
 
 var player_state = 'idle';
+var player_lag = 0;
+var player_next_state = undefined;
 
 var pl_anim_idle = [];
 var pl_anim_closed = [];
@@ -255,7 +279,13 @@ function drawPlayer() {
 var hop_speed = [1,1,2,5,6,7,7,6,5,2,1,1];
 var hop_index = 0;
 function updatePlayer( dt ) {
-   if (player_state === 'idle')
+   if (player_lag > 0) {
+      player_lag--;
+      if (player_lag <= 0)
+         playerChangeState( player_next_state );
+   }
+
+   if (player_state === 'idle' || player_state === 'hop')
       pl_anim_idle[player_facing].update( dt );
 
    if (player_state === 'hop') {
@@ -275,7 +305,7 @@ function updatePlayer( dt ) {
          if (player_offset_y >= 40) {
             playerMove( player_x, player_y + 1 );
          }
-      } else if (player_facing === 0) {
+      } else if (player_facing === 3) {
          player_offset_x -= dhop;
          if (player_offset_x <= -40) {
             playerMove( player_x - 1, player_y );
@@ -286,14 +316,26 @@ function updatePlayer( dt ) {
 
 function playerChangeState( state )
 {
-   player_state = state;
+   if (state) {
+      if (player_lag <= 0) {
+         player_state = state;
+         player_next_state = undefined;
+         player_lag = 5;
+      } else {
+         player_next_state = state;
+      }
+   }
 }
 
 function playerMove( x, y )
 {
+   // Update map
+   map[player_x][player_y].unit = undefined;
+   map[x][y].unit = 'player';
+
    player_x = x;
    player_y = y;
-   player_state = 'idle';
+   playerChangeState( 'idle' );
    player_offset_x = 0;
    player_offset_y = 0;
    hop_index = 0;
@@ -316,7 +358,7 @@ function playerTryHop()
    if (map[to_x][to_y].t !== 0)
       return false;
 
-   player_state = 'hop';
+   playerChangeState( 'hop' );
    // TODO: Hop cloud?
    return true;
 }
@@ -324,15 +366,196 @@ function playerTryHop()
 /////////////////////////////////////////////////////////////////////
 // Enemies ---
 
-var enemies = [];
+var enemy_images = [];
+enemy_images.push( img_enemy_n );
+enemy_images.push( img_enemy_e );
+enemy_images.push( img_enemy_s );
+enemy_images.push( img_enemy_w );
+
+function Enemy( x, y, face ) {
+   this.x = x;
+   this.y = y;
+   this.facing = face;
+
+   this.state = 'waiting';
+   this.mental_state = 'normal'; // 'normal', 'wary', 'greedy', 'murderous'
+   this.lag = 0;
+
+   this.path = []; // [ { face, x, y } ... ]
+
+   this.los = 4; // How many squares ahead he can see
+
+   this.hop_index = 0;
+   this.offset_x = 0;
+   this.offset_y = 0;
+
+   this.next_state = '';
+   this.next_facing = 0;
+}
+
+function addEnemy( x, y, face )
+{
+   var e = new Enemy( x, y, face );
+   enemies.push( e );
+   return e;
+}
+
+function drawEnemy( enemy, x, y )
+{
+   var x, y, middle = BLOCK_SIZE * 7;
+   x = ((enemy.x - player_x) * BLOCK_SIZE) + middle + enemy.offset_x;
+   y = ((enemy.y - player_y) * BLOCK_SIZE) + middle + enemy.offset_y;
+
+   // Draw enemy sprite
+   context.drawImage( enemy_images[enemy.facing], x, y );
+
+   // Draw vision dots
+   x += (BLOCK_SIZE / 2);
+   y += (BLOCK_SIZE / 2);
+   var dx = 0, dy = 0;
+   if (enemy.facing === 0) dy = -(BLOCK_SIZE / 2.1);
+   if (enemy.facing === 2) dy = (BLOCK_SIZE / 2.1);
+   if (enemy.facing === 3) dx = -(BLOCK_SIZE / 2.1);
+   if (enemy.facing === 1) dx = (BLOCK_SIZE / 2.1);
+
+   for (var i = 0; i < enemy.los * 2; ++i) {
+      x += dx;
+      y += dy;
+      context.beginPath();
+      context.fillStyle = "white";
+      context.arc(x, y, 1.5, 0, 2 * Math.PI, false);
+      context.fill();
+   }
+}
+
+function drawEnemies()
+{
+   for (var i = 0; i < enemies.length; ++i) {
+      var e = enemies[i];
+      if (e.x >= player_x - 15 && e.y >= player_y - 15
+       && e.x <= player_x + 15 && e.y <= player_y + 15)
+         drawEnemy( e );
+   }
+}
+
+var enemy_hop_speed = [1,1,1,1,1,1,1,1,1,1,1,1];
+function updateEnemy( enemy, dt )
+{
+   // Check if he notices anything
 
 
 
+
+   if (enemy.lag > 0) {
+      enemy.lag--;
+      if (enemy.lag === 0) {
+         enemy.state = enemy.next_state;
+         enemy.facing = enemy.next_facing;
+
+      } else
+         return;
+   }
+
+   if (enemy.state === 'waiting') {
+      // Try next movement
+      var next_x = enemy.x, next_y = enemy.y;
+      if (enemy.facing === 0) {
+         next_y -= 1;
+      } else if (enemy.facing === 1) {
+         next_x += 1;
+      } else if (enemy.facing === 2) {
+         next_y += 1;
+      } else if (enemy.facing === 3) {
+         next_x -= 1;
+      }
+
+      if (map[next_x][next_y].unit === undefined) {
+         enemy.state = 'hop';
+      }
+   } 
+   if (enemy.state === 'hop') {
+      var dhop = 1; //enemy_hop_speed[ enemy.hop_index++ ];
+      if (enemy.facing === 0) {
+         enemy.offset_y -= dhop;
+         if (enemy.offset_y <= -40) {
+            enemyMove( enemy, enemy.x, enemy.y - 1 );
+         }
+      } else if (enemy.facing === 1) {
+         enemy.offset_x += dhop;
+         if (enemy.offset_x >= 40) {
+            enemyMove( enemy, enemy.x + 1, enemy.y );
+         }
+      } else if (enemy.facing === 2) {
+         enemy.offset_y += dhop;
+         if (enemy.offset_y >= 40) {
+            enemyMove( enemy, enemy.x, enemy.y + 1 );
+         }
+      } else if (enemy.facing === 3) {
+         enemy.offset_x -= dhop;
+         if (enemy.offset_x <= -40) {
+            enemyMove( enemy, enemy.x - 1, enemy.y );
+         }
+      }
+
+   }
+}
+
+function updateEnemies()
+{
+   for (var i = 0; i < enemies.length; ++i)
+      updateEnemy( enemies[i] );
+}
+
+function enemyMove( enemy, x, y )
+{
+   // Update map
+   map[enemy.x][enemy.y].unit = undefined;
+   map[x][y].unit = enemy;
+
+   enemy.x = x;
+   enemy.y = y;
+   enemy.offset_x = 0;
+   enemy.offset_y = 0;
+   enemy.hop_index = 0;
+   enemy.state = 'waiting';
+
+   if (x === enemy.path[0].x && y === enemy.path[0].y) {
+      // Path point reached
+      var path_point = enemy.path.shift();
+      enemy.path.push( path_point ); // Cycle the path
+
+      // Setup next move
+      enemy.next_facing = path_point.face;
+      enemy.next_state = 'hop';
+      enemy.lag = 100;
+   }
+
+   // Check next location, see if need to wait
+}
+
+function enemyCreatePath( enemy )
+{
+   for (var i = 1; i < arguments.length; i += 3) {
+      var x = arguments[i];
+      var y = arguments[i+1];
+      var face = arguments[i+2];
+
+      var path_point = { face: face, x: x, y: y };
+
+      enemy.path.push( path_point );
+   }
+}
 
 /////////////////////////////////////////////////////////////////////
 // Logic ---
 
-
+function updateWinCondition()
+{
+   if (enemies.length === 0)
+      return true;
+   else
+      return false;
+}
 
 /////////////////////////////////////////////////////////////////////
 // Controls ---
@@ -420,9 +643,11 @@ setupScreen();
 var draw = function() {
    centerMap();
 
+   calculateVision();
+
    drawFloor();
    drawPlayer();
-   //drawEnemies();
+   drawEnemies();
 
    // Terrain
    var draw_x = -BLOCK_SIZE, draw_y;
@@ -441,7 +666,7 @@ var draw = function() {
 
 var update = function( dt ) {
    updatePlayer( dt );
-   //updateEnemies();
+   updateEnemies();
    //updateWinCondition();
 }
 
@@ -484,6 +709,11 @@ loadImage( img_pl_closed_s, "MimicClosedS.png" );
 loadImage( img_pl_idle_w1, "MimicIdleW1.png" );
 loadImage( img_pl_idle_w2, "MimicIdleW2.png" );
 loadImage( img_pl_closed_w, "MimicClosedW.png" );
+
+loadImage( img_enemy_n, "EnemyN.png" );
+loadImage( img_enemy_e, "EnemyE.png" );
+loadImage( img_enemy_s, "EnemyS.png" );
+loadImage( img_enemy_w, "EnemyW.png" );
 /*
 loadImage( wallN_image, 'WallN.png' );
 loadImage( wallE_image, 'WallE.png' );
