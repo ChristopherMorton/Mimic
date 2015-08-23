@@ -106,12 +106,15 @@ var snd_monster1 = new Audio('Mimic\ Monster\ 1.ogg');
 var snd_monster2 = new Audio('Mimic\ Monster\ 2.ogg');
 var snd_ohoh = new Audio('Mimic\ Ohoh\ 1.ogg');
 var snd_ooh = new Audio('Mimic\ Ooh\ 1.ogg');
+var snd_slurp1 = new Audio('Mimic\ Slurp\ 1.ogg');
+var snd_slurp2 = new Audio('Mimic\ Slurp\ 2.ogg');
 
 var snd_footsteps = [ snd_footstep1, snd_footstep2, snd_footstep3, snd_footstep4 ];
 var snd_coins = [ snd_coin1, snd_coin2, snd_coin1, snd_coin3, snd_coin1, snd_coin2, snd_coin1 ]; 
 var snd_huhs = [ snd_huh1, snd_huh2 ];
 var snd_greed = [ snd_ahah, snd_ohoh, snd_ooh ];
 var snd_aggro = [ snd_monster1, snd_monster2, snd_die1, snd_die2 ];
+var snd_slurps = [ snd_slurp1, snd_slurp2 ];
 
 function mute() {
    snd_ahah.pause();
@@ -130,6 +133,8 @@ function mute() {
    snd_monster2.pause();
    snd_ohoh.pause();
    snd_ooh.pause();
+   snd_slurp1.pause();
+   snd_slurp2.pause();
    muted = true;
 }
 
@@ -156,7 +161,7 @@ function Animation( duration ) {
 Animation.prototype.update = function ( dt ) {
    this.cur += dt;
    if (this.cur >= this.duration) {
-      this.cur = this.duration - 1;
+      this.cur -= this.duration;
       return true;
    } else {
       return false;
@@ -265,8 +270,11 @@ function MapLoc( t ) {
 // Data ---
 
 var game_over = false;
+var game_complete = false;
+var points = 0;
 var checkpoint = 0;
 var enemies_defeated = {};
+var fog_on = true;
 
 var SCREEN_WIDTH = 15, SCREEN_HEIGHT = 15; // 600x600 px
 var BLOCK_SIZE = 40; // This is the image size as well
@@ -279,24 +287,24 @@ var MAP_WIDTH = 60, MAP_HEIGHT = 60;
 var level = [ 
 "XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX",
 "X.XXXXXXXXXX.......XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX",
-"X.XXXXXXX.XX.X.X.X.XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX",
+"X.XXX.XXX.XX.X.X.X.XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX",
 "X.........XX.X...X.XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX",
 "XXXXX.XXX.XX.X.X.X.XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX",
 "XXXXX.XXX.XX.......XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX",
 "XXXXX.....XX.XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX",
-"XXXXXXXXX.XX.XXX.....XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX",
-"AAAAAAAAX.....XX.X.X.XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX",
-"AaaaaaaAXXX.X.XX.X.X.XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX",
-"AaaaaaaAXXX...XX.X.X.XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX",
+"XXXXXXXXX.XX.XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX",
+"XXXXXXXXX.....XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX",
+"XXXXXXXXXXX.X.XX.X...XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX",
+"AAAAAAAAXXX...XX.X.X.XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX",
 "AaaaaaaAXXXX.XXX.X.X.XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX",
-"Aaaaaaaa.........X.X.XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX",
+"AaaaaaaAXXXX.XXX.X.X.XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX",
+"AaaaaaaAXXXX.XXX.X.X.XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX",
+"Aaaaaaaa.........X.X.....XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX",
 "AaaaaaaAXXXXXXXX.X.X.XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX",
 "AaaaaaaAXXXXXXXX.X.X.XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX",
 "AaaaaaaAXXXXXXXX.X.X.XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX",
 "AAAAAAAAXXXXXXXX.X.X.XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX",
-"XXXXXXXXXXXXXXXX.....XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX",
-"XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX",
-"XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX",
+"XXXXXXXXXXXXXXXX...X.XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX",
 "XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX",
 "XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX",
 "XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX",
@@ -393,9 +401,33 @@ initMap();
 function spawnEnemies()
 {
    var e;
-   if (enemies_defeated['a'] === undefined) {
-      e = addEnemy( 5, 3, 1, 'a' );
+   if (enemies_defeated['a1'] === undefined) {
+      e = addEnemy( 5, 3, 1, 'a1' );
       enemyCreatePath( e, 9, 3, 2, 9, 6, 3, 5, 6, 0, 5, 3, 1 );
+   }
+   if (enemies_defeated['b1'] === undefined) {
+      e = addEnemy( 11, 8, 2, 'b1' );
+      enemyCreatePath( e, 11, 10, 1, 13, 10, 0, 13, 8, 3, 11, 8, 2 );
+   }
+   if (enemies_defeated['c1'] === undefined) {
+      e = addEnemy( 12, 2, 0, 'c1' );
+      enemyCreatePath( e, 12, 1, 1, 16, 1, 2, 16, 3, 3, 14, 3, 2, 14, 5, 1, 18, 5, 0, 18, 1, 3, 14, 1, 2, 14, 3, 1, 16, 3, 2, 16, 5, 3, 12, 5, 0 );
+   }
+   if (enemies_defeated['d1'] === undefined) {
+      e = addEnemy( 2, 11, 3, 'd1' );
+      enemyCreatePath( e, 1, 11, 2, 1, 17, 1, 6, 17, 0, 6, 11, 3 );
+   }
+   if (enemies_defeated['d2'] === undefined) {
+      e = addEnemy( 5, 17, 1, 'd2' );
+      enemyCreatePath( e, 6, 17, 0, 6, 11, 3, 1, 11, 2, 1, 17, 1 );
+   }
+   if (enemies_defeated['d3'] === undefined) {
+      e = addEnemy( 2, 13, 0, 'd3' );
+      enemyCreatePath( e, 2, 12, 1, 5, 12, 2, 5, 16, 3, 2, 16, 0 );
+   }
+   if (enemies_defeated['d4'] === undefined) {
+      e = addEnemy( 5, 15, 2, 'd4' );
+      enemyCreatePath( e, 5, 16, 3, 2, 16, 0, 2, 12, 1, 5, 12, 2 );
    }
 }
 
@@ -681,9 +713,15 @@ function playerChangeState( state )
 {
    if (state) {
       if (state === 'eating') {
-         // No lag, TODO: also initiate sound
+         // No lag, also initiate sound
          player_state = state;
          player_next_state = undefined;
+
+         var rand = (Math.random()<0.5)?0:1;
+         snd_slurps[rand].currentTime = 0;
+         snd_slurps[rand].volume = 1.0;
+         snd_slurps[rand].play();
+
 
       } else if (player_lag <= 0) {
          player_state = state;
@@ -712,18 +750,19 @@ function playerMove( x, y )
    // Coin sound
    which_sound = (which_sound + 1) % 7;
    snd_coins[which_sound].currentTime = 0;
-   snd_coins[which_sound].volume = 0.4;
+   snd_coins[which_sound].volume = 0.3;
    snd_coins[which_sound].play();
 
-   // TODO: Alert nearby enemies
+   // Alert nearby enemies
    for (var j = x - 3; j <= x + 3; ++j) {
       if (j < 0 || j >= MAP_WIDTH) continue;
       for (var k = y - 3; k <= y + 3; ++k) {
          if (k < 0 || k >= MAP_HEIGHT) continue;
 
          var enemy = map[j][k].unit;
-         if (enemy !== undefined && enemy !== 'player') {
+         if (enemy !== undefined && enemy !== 'player' && enemy.mental_state !== 'aggro') {
             enemy.alerted = { x: x, y: y };
+            enemy.paranoia++;
          }
       }
    }
@@ -749,7 +788,6 @@ function playerTryHop()
 
    playerChangeState( 'hop' );
    map[to_x][to_y].unit = 'player';
-   // TODO: Hop cloud?
    return true;
 }
 
@@ -801,6 +839,8 @@ function Enemy( x, y, face, id ) {
    this.follow_direction = undefined;
 
    this.voice = Math.floor( Math.random() * 4 );
+
+   this.paranoia = 0;
 }
 
 function addEnemy( x, y, face, id )
@@ -827,7 +867,7 @@ function drawEnemy( enemy, x, y )
       context.drawImage( enemy_swords[enemy.facing], x + dx, y + dy );
 
    } else if (enemy.state === 'greedy_kill') {
-      // TODO: Draw reaching out
+      // Draw reaching out
       if (enemy.lag < 100) {
          if (enemy.lag < 0) enemy.lag = 0;
          var dx = 0, dy = 0;
@@ -868,7 +908,7 @@ function drawEnemies()
       var e = enemies[i];
       if (e.x >= player_x - 15 && e.y >= player_y - 15
        && e.x <= player_x + 15 && e.y <= player_y + 15) {
-         if (map[e.x][e.y].visible || map[e.next_x][e.next_y].visible)
+         if (map[e.x][e.y].visible || map[e.next_x][e.next_y].visible || !fog_on)
             drawEnemy( e );
       }
    }
@@ -887,30 +927,46 @@ function enemyCheckVision( enemy )
    for (var i = 0; i < enemy.los; ++i) {
       x += dx;
       y += dy;
+      if (x < 0 || y < 0 || x >= MAP_WIDTH || y >= MAP_HEIGHT)
+         break;
       if (map[x][y].unit === 'player') {
          seen = true;
          enemy.last_seen = { x: x, y: y };
          if (player_state !== 'closed') {
-            // ALERT
+            // Aggro
             if (enemy.mental_state !== 'aggro') {
                enemy.mental_state = 'aggro';
-               enemy.chasepath.unshift( { x: enemy.x, y: enemy.y, face: enemy.facing } );
+               if (enemy.state === 'lookingaround')
+                  enemy.chasepath.unshift( { x: enemy.x, y: enemy.y, face: enemy.next_facing } );
+               else
+                  enemy.chasepath.unshift( { x: enemy.x, y: enemy.y, face: enemy.facing } );
                enemy.lag = 0;
-               enemy.state = 'hop';
+               enemy.state = 'waiting';
+               enemy.next_state = 'waiting';
+               var player_distance = Math.pow((enemy.x - player_x), 2) + Math.pow((enemy.y - player_y), 2 );
                snd_aggro[enemy.voice].currentTime = 0;
-               snd_aggro[enemy.voice].volume = 1;
+               snd_aggro[enemy.voice].volume = (81 - player_distance) / 81;
                snd_aggro[enemy.voice].play();
+
+               enemy.alerted = undefined;
             }
          } else if (enemy.mental_state !== 'aggro') {
             // Greed
             if (enemy.mental_state !== 'greedy') {
                enemy.mental_state = 'greedy';
-               enemy.chasepath.unshift( { x: enemy.x, y: enemy.y, face: enemy.facing } );
-               enemy.lag = 0;
-               enemy.state = 'hop';
+               if (enemy.state === 'lookingaround')
+                  enemy.chasepath.unshift( { x: enemy.x, y: enemy.y, face: enemy.next_facing } );
+               else
+                  enemy.chasepath.unshift( { x: enemy.x, y: enemy.y, face: enemy.facing } );
+               enemy.lag = 40;
+               enemy.state = 'waiting';
+               enemy.next_state = 'waiting';
+               enemy.next_facing = enemy.facing;
                snd_greed[enemy.voice % 3].currentTime = 0;
                snd_greed[enemy.voice % 3].volume = 1;
                snd_greed[enemy.voice % 3].play();
+
+               enemy.alerted = undefined;
             }
          }
       }
@@ -942,6 +998,7 @@ function updateEnemy( enemy, dt )
          if (mapAt( enemy.x, enemy.y, enemy.facing ).unit === 'player') {
             player_facing = getDirection( player_x, player_y, enemy.x, enemy.y );
             playerChangeState( 'eating' );
+            points += 100;
 
             // Remove enemy from game
             for (var i = enemies.length - 1; i >= 0; i--) {
@@ -953,7 +1010,7 @@ function updateEnemy( enemy, dt )
             map[enemy.x][enemy.y].unit = undefined;
             enemies_defeated[ enemy.id ] = true;
          } else {
-            enemy.state = 'hop';
+            enemy.state = 'waiting';
          }
       }
       return;
@@ -963,11 +1020,11 @@ function updateEnemy( enemy, dt )
       if (enemy.lag <= 0) {
          // Kill you
          if (mapAt( enemy.x, enemy.y, enemy.facing ).unit === 'player') {
-            // TODO:GAME OVER
+            // GAME OVER - the bad kind
             game_over = true;
 
          } else {
-            enemy.state = 'hop';
+            enemy.state = 'waiting';
          }
       }
 
@@ -997,7 +1054,7 @@ function updateEnemy( enemy, dt )
          enemy.next_x -= 1;
       }
 
-      if (map[enemy.next_x][enemy.next_y].unit === undefined) {
+      if (map[enemy.next_x][enemy.next_y].unit === undefined || map[enemy.next_x][enemy.next_y].unit === enemy) {
          enemy.state = 'hop';
          map[enemy.next_x][enemy.next_y].unit = enemy;
       } else if (enemy.mental_state === 'greedy' && map[enemy.next_x][enemy.next_y].unit === 'player') {
@@ -1008,8 +1065,10 @@ function updateEnemy( enemy, dt )
          enemy.lag = 8;
       } else if (enemy.alerted !== undefined) {
          // Copied from the one in enemyMove
-         enemy.next_facing = enemy.facing;
-         if (mapAt( x, y, enemy.facing ).t !== 0)
+         if (enemy.lag <= 0)
+            enemy.next_facing = enemy.facing;
+
+         if (mapAt( enemy.x, enemy.y, enemy.next_facing ).t !== 0)
             enemy.next_facing = (enemy.next_facing + 2) % 4;
 
          enemy.facing = getDirection( enemy.x, enemy.y, enemy.alerted.x, enemy.alerted.y );
@@ -1024,10 +1083,10 @@ function updateEnemy( enemy, dt )
          enemyCheckVision( enemy );
 
          if (enemy.mental_state !== 'aggro' && enemy.mental_state !== 'greedy') {
-            var player_distance = Math.sqrt( Math.pow((enemy.x - player_x), 2) + Math.pow((enemy.y - player_y), 2 ) );
-            if (player_distance <= 10) {
+            var player_distance = Math.pow((enemy.x - player_x), 2) + Math.pow((enemy.y - player_y), 2 );
+            if (player_distance <= 81) {
                snd_huhs[enemy.voice % 2].currentTime = 0;
-               snd_huhs[enemy.voice % 2].volume = (10 - player_distance) / 10;
+               snd_huhs[enemy.voice % 2].volume = (81 - player_distance) / 81;
                snd_huhs[enemy.voice % 2].play();
             }
          }
@@ -1080,27 +1139,64 @@ function enemyMove( enemy, x, y )
    enemy.state = 'waiting';
 
    // Sound: step
-   var player_distance = Math.sqrt( Math.pow((x - player_x), 2) + Math.pow((y - player_y), 2 ) );
-   if (player_distance <= 10) {
+   var player_distance = Math.pow((x - player_x), 2) + Math.pow((y - player_y), 2 );
+   if (player_distance <= 81) {
       next_footstep = (next_footstep + 1) % 4;
       snd_footsteps[next_footstep].currentTime = 0;
-      snd_footsteps[next_footstep].volume = ( 10 - player_distance ) / 10;
+      snd_footsteps[next_footstep].volume = ( 81 - player_distance ) / 81;
       snd_footsteps[next_footstep].play();
+   }
+
+   if (x === enemy.path[0].x && y === enemy.path[0].y 
+         && enemy.mental_state !== 'aggro' && enemy.mental_state !== 'greedy') {
+      // Path point reached
+      var path_point = enemy.path.shift();
+      enemy.path.push( path_point ); // Cycle the path
+
+      // Setup next move
+      enemy.next_facing = path_point.face;
+      enemy.next_state = 'waiting';
+      enemy.lag = 100;
+
+      enemy.chasepath = []; // Clear, since we're on the main path
+      if (enemy.mental_state === 'wary')
+         enemy.mental_state = 'normal';
+
+   } else if (enemy.chasepath.length > 0 && x === enemy.chasepath[0].x && y === enemy.chasepath[0].y 
+         && enemy.mental_state !== 'aggro' && enemy.mental_state !== 'greedy') {
+      // chasePath point reached
+      var path_point = enemy.chasepath.shift();
+
+      // Next move
+      enemy.facing = path_point.face;
+      enemy.state = 'waiting';
    }
 
    if (enemy.mental_state === 'aggro') {
       if (enemy.last_seen !== undefined && enemy.follow_direction !== undefined &&
                   x === enemy.last_seen.x && y === enemy.last_seen.y ) {
          // Chase
-         enemy.chasepath.unshift( { x: x, y: y, face: (enemy.facing + 2) % 4 } ); // The way back
+         var way_back = (enemy.facing + 2) % 4;
 
-         enemy.lag = 5;
-         enemy.next_state = 'waiting';
          enemy.facing = enemy.follow_direction;
          enemy.next_facing = enemy.follow_direction;
          enemy.follow_direction = undefined;
 
          enemy.last_seen = undefined;
+
+         enemyCheckVision( enemy );
+
+         if (enemy.last_seen !== undefined) {
+            // Still in his sights
+            enemy.chasepath.unshift( { x: x, y: y, face: way_back } ); // The way back
+
+            enemy.lag = 5;
+            enemy.next_state = 'waiting';
+         } else {
+            enemy.next_facing = way_back;
+            enemy.lag = 100;
+            enemy.next_state = 'waiting';
+         }
 
       } else if (mapAt( x, y, enemy.facing ).unit === 'player') {
          // He kills you
@@ -1111,7 +1207,7 @@ function enemyMove( enemy, x, y )
          enemy.mental_state = 'wary';
          enemy.next_facing = (enemy.facing + 2) % 4;
          enemy.lag = 100;
-         enemy.next_state = 'hop';
+         enemy.next_state = 'waiting';
       }
       
    } else if (enemy.mental_state === 'greedy') {
@@ -1123,8 +1219,10 @@ function enemyMove( enemy, x, y )
       }
 
    } else if (enemy.alerted !== undefined) {
-      enemy.next_facing = enemy.facing;
-      if (mapAt( x, y, enemy.facing ).t !== 0)
+      if (enemy.lag <= 0)
+         enemy.next_facing = enemy.facing;
+
+      if (mapAt( x, y, enemy.next_facing ).t !== 0)
          enemy.next_facing = (enemy.next_facing + 2) % 4;
 
       enemy.facing = getDirection( enemy.x, enemy.y, enemy.alerted.x, enemy.alerted.y );
@@ -1139,40 +1237,19 @@ function enemyMove( enemy, x, y )
       enemyCheckVision( enemy );
 
       if (enemy.mental_state !== 'aggro' && enemy.mental_state !== 'greedy') {
-         var player_distance = Math.sqrt( Math.pow((enemy.x - player_x), 2) + Math.pow((enemy.y - player_y), 2 ) );
-         if (player_distance <= 10) {
+         var player_distance = Math.pow((enemy.x - player_x), 2) + Math.pow((enemy.y - player_y), 2 );
+         if (player_distance <= 81) {
             snd_huhs[enemy.voice % 2].currentTime = 0;
-            snd_huhs[enemy.voice % 2].volume = (10 - player_distance) / 10;
+            snd_huhs[enemy.voice % 2].volume = (81 - player_distance) / 81;
             snd_huhs[enemy.voice % 2].play();
          }
       }
-   
-   } else if (x === enemy.path[0].x && y === enemy.path[0].y) {
-      // Path point reached
-      var path_point = enemy.path.shift();
-      enemy.path.push( path_point ); // Cycle the path
-
-      // Setup next move
-      enemy.next_facing = path_point.face;
-      enemy.next_state = 'waiting';
-      enemy.lag = 100;
-
-      enemy.chasepath = []; // Clear, since we're on the main path again
-      enemy.mental_state = 'normal';
-
-   } else if (enemy.chasepath.length > 0 && x === enemy.chasepath[0].x && y === enemy.chasepath[0].y) {
-      // chasePath point reached
-      var path_point = enemy.chasepath.shift();
-
-      // Next move
-      enemy.facing = path_point.face;
-      enemy.state = 'waiting';
 
    } else if (enemy.mental_state === 'wary') {
       if (Math.random() < 0.2) {
          // Random turn
          var pos_turns = [];
-         if (mapAt(x, y, (enemy.facing - 1) % 4).t === 0 ) // Turn left
+         if (mapAt(x, y, (enemy.facing + 3) % 4).t === 0 ) // Turn left
             pos_turns.push( -1 );
          else if (mapAt(x, y, (enemy.facing + 1) % 4).t === 0 ) // Turn right
             pos_turns.push( 1 );
@@ -1188,6 +1265,10 @@ function enemyMove( enemy, x, y )
          enemy.state = 'lookingaround';
          enemy.lag = 100;
          enemy.next_state = 'waiting';
+
+         enemy.paranoia--;
+         if (enemy.paranoia <= 0)
+            enemy.mental_state = 'normal';
       }
    }
 
@@ -1220,9 +1301,11 @@ function enemyCreatePath( enemy )
 
 function updateWinCondition()
 {
-   if (enemies.length === 0)
+   if (enemies.length === 0) {
+      game_over = true;
+      game_complete = true;
       return true;
-   else
+   } else
       return false;
 }
 
@@ -1286,15 +1369,8 @@ function centerMap()
 function drawFloor()
 {
    context.fillStyle = "gray";
-   context.fillRect( 0, 0, 630, 630 );
+   context.fillRect( -BLOCK_SIZE, -BLOCK_SIZE, 600 + (BLOCK_SIZE * 2), 600 + (BLOCK_SIZE * 2) );
 }
-
-function setupScreen()
-{
-
-
-}
-setupScreen();
 
 /////////////////////////////////////////////////////////////////////
 // Loop ---
@@ -1323,9 +1399,9 @@ var draw = function() {
             vis = map[x][y].visible;
             found = map[x][y].found;
          }
-         if (!found) {
+         if (!found && fog_on) {
             drawTerrain( -2, draw_x, draw_y );
-         } else if (!vis) {
+         } else if (!vis && fog_on) {
             drawTerrain( ter, draw_x, draw_y );
             drawFog( draw_x, draw_y );
          } else {
@@ -1341,8 +1417,10 @@ var update = function( dt ) {
    if (!game_over) {
       updatePlayer( dt );
       updateEnemies();
+      updateWinCondition();
+   } else {
+
    }
-   //updateWinCondition();
 }
 
 var main = function() {
