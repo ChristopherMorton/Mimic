@@ -1,7 +1,5 @@
 'use strict';
 
-var LOG = $( "#log" );
-
 var canvas = $('#mimic_canvas')[0]
 var context = canvas.getContext('2d');
 
@@ -87,6 +85,11 @@ var img_rock2 = new Image();
 var img_rock3 = new Image();
 var img_inside = new Image();
 
+var img_sound = new Image();
+var img_nosound = new Image();
+var img_music = new Image();
+var img_nomusic = new Image();
+
 /////////////////////////////////////////////////////////////////////
 // Sounds ---
 
@@ -96,9 +99,9 @@ var snd_coin2 = new Audio('Mimic\ Coin\ 2.ogg');
 var snd_coin3 = new Audio('Mimic\ Coin\ 3.ogg');
 var snd_die1 = new Audio('Mimic\ Die\ 1.ogg');
 var snd_die2 = new Audio('Mimic\ Die\ 2.ogg');
+var snd_eh2 = new Audio('Mimic\ Eh\ 2.ogg');
 var snd_footstep1 = new Audio('Mimic\ Footstep\ 1.ogg');
 var snd_footstep2 = new Audio('Mimic\ Footstep\ 2.ogg');
-var snd_footstep3 = new Audio('Mimic\ Footstep\ 3.ogg');
 var snd_footstep4 = new Audio('Mimic\ Footstep\ 4.ogg');
 var snd_huh1 = new Audio('Mimic\ Huh\ 1.ogg');
 var snd_huh2 = new Audio('Mimic\ Huh\ 2.ogg');
@@ -106,12 +109,24 @@ var snd_monster1 = new Audio('Mimic\ Monster\ 1.ogg');
 var snd_monster2 = new Audio('Mimic\ Monster\ 2.ogg');
 var snd_ohoh = new Audio('Mimic\ Ohoh\ 1.ogg');
 var snd_ooh = new Audio('Mimic\ Ooh\ 1.ogg');
+var snd_qua = new Audio('Mimic\ Qua\ 1.ogg');
 var snd_slurp1 = new Audio('Mimic\ Slurp\ 1.ogg');
 var snd_slurp2 = new Audio('Mimic\ Slurp\ 2.ogg');
+var snd_what = new Audio('Mimic\ What\ 1.ogg');
 
-var snd_footsteps = [ snd_footstep1, snd_footstep2, snd_footstep3, snd_footstep4 ];
+var snd_ambient = new Audio('Mimic\ Ambient.ogg');
+
+var ambient_loop = new SeamlessLoop();
+ambient_loop.addUri( 'Mimic\ Ambient.ogg', 32550, "ambient" );
+ambient_loop.callback( startLoop );
+
+function startLoop() {
+   ambient_loop.start( "ambient" );
+}
+
+var snd_footsteps = [ snd_footstep1, snd_footstep2, snd_footstep4 ];
 var snd_coins = [ snd_coin1, snd_coin2, snd_coin1, snd_coin3, snd_coin1, snd_coin2, snd_coin1 ]; 
-var snd_huhs = [ snd_huh1, snd_huh2 ];
+var snd_huhs = [ snd_huh1, snd_what, snd_huh2, snd_eh2, snd_qua ];
 var snd_greed = [ snd_ahah, snd_ohoh, snd_ooh ];
 var snd_aggro = [ snd_monster1, snd_monster2, snd_die1, snd_die2 ];
 var snd_slurps = [ snd_slurp1, snd_slurp2 ];
@@ -125,7 +140,6 @@ function mute() {
    snd_die2.pause();
    snd_footstep1.pause();
    snd_footstep2.pause();
-   snd_footstep3.pause();
    snd_footstep4.pause();
    snd_huh1.pause();
    snd_huh2.pause();
@@ -135,11 +149,37 @@ function mute() {
    snd_ooh.pause();
    snd_slurp1.pause();
    snd_slurp2.pause();
+   
+   ambient_loop.stop();
+
    muted = true;
 }
 
 function unmute() {
    muted = false;
+   if (!music_muted) {
+      ambient_loop.start( "ambient" );
+   }
+}
+
+function toggleMute() {
+   if (muted)
+      unmute();
+   else
+      mute();
+}
+
+function toggleMusicMute() {
+   if (music_muted) {
+      if (!muted)
+         ambient_loop.start( "ambient" );
+
+      music_muted = false;
+   } else {
+      ambient_loop.stop();
+
+      music_muted = true;
+   }
 }
 
 /////////////////////////////////////////////////////////////////////
@@ -264,6 +304,7 @@ function MapLoc( t ) {
    this.found = false;
 
    this.room = undefined;
+   this.checkpoint = undefined;
 }
 
 /////////////////////////////////////////////////////////////////////
@@ -272,79 +313,82 @@ function MapLoc( t ) {
 var game_over = false;
 var game_complete = false;
 var points = 0;
-var checkpoint = 0;
+var checkpoint = { x: 1, y: 1 };
 var enemies_defeated = {};
 var fog_on = true;
 
 var SCREEN_WIDTH = 15, SCREEN_HEIGHT = 15; // 600x600 px
 var BLOCK_SIZE = 40; // This is the image size as well
 
-var HOP_DURATION = 250;
+var muted = false;
+var music_muted = false;
 
 // Map --
 
 var MAP_WIDTH = 60, MAP_HEIGHT = 60;
 var level = [ 
-"XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX",
-"X.XXXXXXXXXX.......XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX",
-"X.XXX.XXX.XX.X.X.X.XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX",
-"X.........XX.X...X.XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX",
-"XXXXX.XXX.XX.X.X.X.XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX",
-"XXXXX.XXX.XX.......XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX",
-"XXXXX.....XX.XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX",
-"XXXXXXXXX.XX.XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX",
-"XXXXXXXXX.....XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX",
-"XXXXXXXXXXX.X.XX.X...XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX",
-"AAAAAAAAXXX...XX.X.X.XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX",
-"AaaaaaaAXXXX.XXX.X.X.XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX",
-"AaaaaaaAXXXX.XXX.X.X.XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX",
-"AaaaaaaAXXXX.XXX.X.X.XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX",
-"Aaaaaaaa.........X.X.....XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX",
-"AaaaaaaAXXXXXXXX.X.X.XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX",
-"AaaaaaaAXXXXXXXX.X.X.XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX",
-"AaaaaaaAXXXXXXXX.X.X.XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX",
-"AAAAAAAAXXXXXXXX.X.X.XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX",
-"XXXXXXXXXXXXXXXX...X.XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX",
-"XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX",
-"XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX",
-"XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX",
-"XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX",
-"XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX",
-"XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX",
-"XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX",
-"XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX",
-"XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX",
-"XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX",
-"XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX",
-"XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX",
-"XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX",
-"XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX",
-"XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX",
-"XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX",
-"XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX",
-"XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX",
-"XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX",
-"XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX",
-"XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX",
-"XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX",
-"XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX",
-"XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX",
-"XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX",
-"XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX",
-"XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX",
-"XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX",
-"XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX",
-"XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX",
-"XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX",
-"XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX",
-"XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX",
-"XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX",
-"XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX",
-"XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX",
-"XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX",
-"XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX",
-"XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX",
-"XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX" ];
+"XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX", // 0
+"X.XXXXXXXXXX.......XXXXXXXXXXXXXXXXX...................XXXXX",
+"X.XXX.XXX.XX.X.X.X.XXXXXXXXXXXXXXXXX.X.XXXXXXXXXXXXXXX.XXXXX",
+"X.........XX.X...X.XXXXXXXXXXXXXXXXX.X..X............X.XXXXX",
+"XXXXX.XXX.XX.X.X.X.XXXXXXXXXXXXXXXXX.X..X.........X..X.XXXXX",
+"XXXXX.XXX.XX.......XXXXXXXXXXXXXXXXX.X..X.........X..X.XXXXX",
+"XXXXX.....XX.XXXXXXXXXXXXXXXXXXXXXXX.XX.X.........XX.X.XXXXX",
+"XXXXXXXXX.XX.XXXXXXXXXXXXXXXXXXXXXXX.X..X.........X..X.XXXXX",
+"XXXXXXXXX.....XXXXXXXXXXXXXXXXXXXXXX.X..X.........X..X.XXXXX",
+"XXXXXXXXXXX.X.XXXXXXXXXXXXXXXXXXXXXX.XXXXXXXX.XXXXXXXX.XXXXX", 
+"AAAAAAAAXXX...XXXXXXXXXXXXXXXXXXXXXX...................XXXXX", // 10
+"AaaaaaaAXXXX.XXX.X...XXXXXXXXXXXXXXX...................XXXXX",
+"AaaaaaaAXXXX.XXX.X.X.XXXXXXXXXXXXXXXXXXXXXXXX.XXXXXXXXXXXXXX",
+"AaaaaaaAXXXX.XXX.X.X.XXX...XXXXXXXXXXXXXXXXXX....XXXXXXXXXXX",
+"Aaaaaaaa.........X.X.....X.XXXXXXXXXXXXXXXXXXXXX.XXXXXXXXXXX",
+"AaaaaaaAXXXXXXXX.X.X.XXX...XXXXXXXXXXXXXXXXXXXXX.XXXXXXXXXXX",
+"AaaaaaaAXXXXXXXX.X.X.XXXXXXXXXXXXXXXXXXXXXXXXXXX.XXXXXXXXXXX",
+"AaaaaaaAXXXXXXXX...X.XXXXXXXXXXXXXXXXXXXXXXXXXXX.XXXXXXXXXXX",
+"AAAAAAAAXXXXXXXXXXXX.XXXXXXXXXXXXXXXXXXX.............XXXXXXX",
+"XXXXXXXXXXXXXXXXXXXX.XXXXXXXXXXXXXXXXXXX.XXXXXXXXXXX.XXXXXXX",
+"XXXXXXXXXXXXXXXXXXXX.XXXXXXXXXXXXXXXXXXX.XXXXXXXXXXX.XXXXXXX", // 20
+"XXXXXXXXXXXXXX...X...XXXXXXXXXXXXXXXXXXX.XXXXXXXCCCC.CCCCXXX",
+"XXXXXXXXXXXXXX.X...X.XXXXXXXXXXXXXXXXXX...XXXXXXCcccccccCXXX",
+"XXXXXXXXXXXXXX...X...XXXXXXXXXXXXXXXXXX...XXXXXXCcccccccCXXX",
+"XXXXXXXXXXXXXX.X...X.XXXXXXXXXXXXXXXXXX...XXXXXXCcccccccCXXX",
+"XX......XXXXXX...X...XXXXXXXXXXXXXXXXXX...XXXXXXCcccccccCXXX",
+"XX......XXXXXX.X...X.XXXXXXXXXXXXXXXXXX...XXXXXXCCCCCCCCCXXX",
+"XX.XXXX.XXXXXX...X...XXXXXXXXXXXXXXXXXX...XXXXXXXXXXXXXXXXXX",
+"XX....X.XXXXXX.X...X.XXXXXXXXXXXXXXXXXX...XXXXXXXXXXXXXXXXXX",
+"XX.XX.X.XXXXXX...X...XXXXXXXXXXXXXXXXXX...XXXXXXXXXXXXXXXXXX",
+"XX.XX.X.XXXXXX.XXXXXXXXXXXXXXXXX.....XX...XXXXXXXXXXXXXXXXXX", // 30
+"XX....X........XXXXXXXXXXXXXXXXX.....XX...XXXXXXXXXXXXXXXXXX",
+"XX.XX.X.XXXXXX...XXXXXXXXXXXXXXX..X.......XXXXXXXXXXXXXXXXXX",
+"XX.XX.X.XXXXXX.X.XXXXXXXXXXXXXXX.....XX...XXXXXXX........XXX",
+"XX....X.XXXXXX...XXXXXXXXXXXXXXX.....XX...XXXXXX..........XX",
+"XX.XXXX.XXXXXXXX.XXXXXXXXXXXXXXXXXXXXXX...XXXXXX...XXXX...XX",
+"XX......XXXXXXXX.XXXXXXXXXXXXXXXXXXXXXX...XXXXXX..XX..XX..XX",
+"XX......XXXXXXXX.XXXX.XXXXXXXXXXXXXXXXX...XXXXXX..X....X..XX",
+"XXXXXXXXXXXXXXXX.XXXX.X.X.XXX...XXXXXXX...XXXXXX..X..XXX..XX",
+"XXXXXXXXXXXXXXXX.XXXX.X.X.X.X.X.XXXXXXX...XXXXXX..X.......XX",
+"XXXXXXXXXXXXXXX...XXX.X.X.X.X.X.XXXXXXX...XXXXXX..XX.....XXX", // 40
+"XXXXXXXXXX....................X.XXXXXXXX.XXXXXXX...XXXXXXXXX",
+"XXXXXXXXXX.XXXX...XXX.X.X.X.X.X.XXXXXXXX...................X",
+"XXXXXXXXXX.XXXXX.XXXX.X.X.X.X.X.XXXXXXXXXXXXXXXX..XXXXXXXX.X",
+"XXXXXXXXXX.XXXXX.XXXX.X.X.XXX...XXXXXXXXXXXXXXXX..XXXXXXXX.X",
+"XXXXXXXXXX.XXXXX.XXXX.X.XXXXXXXXXXXXXXXXXXXXXXXX..XXXXXXXX.X",
+"X..........XXXXX.XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX..XXXXXXXX.X",
+"X.XXXXXXXX.XXXXX.XXXXXXXXXXXXXXBBBBBBBBBBBBXXXXX..XXXXXXXX.X",
+"X.X......X.XXXXX...XXXXXXXXXXXBBbbbbbbbbbbBBXXXX..XXXXXXXX.X",
+"X.XXXXXX.X.XXXXXXX.XXXXXXXXXXXBbbbbbbbbbbbbBXXXX..XXXXXXXX.X",
+"X......X.X.XXX...X...XXXXXXXXXBbbbbbbbbbbbbBXXXX..X.X.X....X", // 50
+"X.XXXX.X.X.XXX.X.XXX.XXXXXXXXXBbbbbbbbbbbbbBXXXX..X.X.XX.XXX",
+"X.X....X.X.XXX.....X...XXX....bbbbbbbbbbbbbb......X.X.XX.XXX",
+"X.X.XXXX.X.XXX.X.X.XXX.XXX....bbbbbbbbbbbbbb......X.X.XX.XXX",
+"X.X......X.XXX.......X...X....bbbbbbbbbbbbbb.....XX...XX.XXX",
+"X.X.XXXXXX.XXX.X.X.X.XXX.X.XXXBbbbbbbbbbbbbBXXXXXXX.X.XX.XXX",
+"X.X........XXX.............XXXBbbbbbbbbbbbbBXXXXXXX.X.XX.XXX",
+"X.XXXXXXXX.XXXXXXXXXXXXXXXXXXXBbbbbbbbbbbbbBXXXXXXX.X.XX.XXX",
+"X..........XXXXXXXXXXXXXXXXXXXBBbbbbbbbbbbBBXXXXXXX.X.....XX",
+"XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXBBBBBBBBBBBBXXXXXXXXXXXXXXXXX" ]; // 59
+
+// TODO: HI bonus
 
 var map;
 
@@ -392,27 +436,43 @@ function initMap( mapfile )
 
    drawPaths();
 
+   setCheckpoints();
+
    calculateEdges();
 
    spawnEnemies();
 }
 initMap();
 
+function clearEnemies()
+{
+   enemies = [];
+   for (var x = 0; x < MAP_WIDTH ; ++x) {
+      for (var y = 0; y < MAP_HEIGHT ; ++y) { 
+         map[x][y].unit = undefined;
+      }
+   }
+}
+
 function spawnEnemies()
 {
+   clearEnemies();
    var e;
    if (enemies_defeated['a1'] === undefined) {
       e = addEnemy( 5, 3, 1, 'a1' );
       enemyCreatePath( e, 9, 3, 2, 9, 6, 3, 5, 6, 0, 5, 3, 1 );
    }
+
    if (enemies_defeated['b1'] === undefined) {
       e = addEnemy( 11, 8, 2, 'b1' );
       enemyCreatePath( e, 11, 10, 1, 13, 10, 0, 13, 8, 3, 11, 8, 2 );
    }
+
    if (enemies_defeated['c1'] === undefined) {
       e = addEnemy( 12, 2, 0, 'c1' );
       enemyCreatePath( e, 12, 1, 1, 16, 1, 2, 16, 3, 3, 14, 3, 2, 14, 5, 1, 18, 5, 0, 18, 1, 3, 14, 1, 2, 14, 3, 1, 16, 3, 2, 16, 5, 3, 12, 5, 0 );
    }
+
    if (enemies_defeated['d1'] === undefined) {
       e = addEnemy( 2, 11, 3, 'd1' );
       enemyCreatePath( e, 1, 11, 2, 1, 17, 1, 6, 17, 0, 6, 11, 3 );
@@ -428,6 +488,298 @@ function spawnEnemies()
    if (enemies_defeated['d4'] === undefined) {
       e = addEnemy( 5, 15, 2, 'd4' );
       enemyCreatePath( e, 5, 16, 3, 2, 16, 0, 2, 12, 1, 5, 12, 2 );
+   }
+
+   if (enemies_defeated['e1'] === undefined) {
+      e = addEnemy( 25, 13, 3, 'e1' );
+      enemyCreatePath( e, 24, 13, 2, 24, 15, 1, 26, 15, 0, 26, 13, 3 );
+   }
+   if (enemies_defeated['e2'] === undefined) {
+      e = addEnemy( 25, 15, 1, 'e2' );
+      enemyCreatePath( e, 26, 15, 0, 26, 13, 3, 24, 13, 2, 24, 15, 1 );
+   }
+
+   if (enemies_defeated['f1'] === undefined) {
+      e = addEnemy( 14, 23, 0, 'f1' );
+      enemyCreatePath( e, 14, 21, 1, 16, 21, 2, 16, 22, 1, 18, 22, 2, 18, 23, 1, 20, 23, 2, 20, 25, 3, 18, 25, 0, 18, 24, 3, 16, 24, 0, 16, 23, 3, 14, 23, 0 );
+   }
+   if (enemies_defeated['f2'] === undefined) {
+      e = addEnemy( 18, 26, 2, 'f2' );
+      enemyCreatePath( e, 18, 27, 1, 20, 27, 2, 20, 29, 3, 18, 29, 0, 18, 28, 3, 16, 28, 0, 16, 27, 3, 14, 27, 0, 14, 25, 1, 16, 25, 2, 16, 26, 1, 18, 26, 2 );
+   } 
+   if (enemies_defeated['f3'] === undefined) {
+      e = addEnemy( 16, 29, 3, 'f3' );
+      enemyCreatePath( e, 14, 29, 0, 14, 21, 1, 16, 21, 2, 16, 22, 1, 18, 22, 0, 18, 21, 1, 20, 21, 2, 20, 29, 3, 18, 29, 0, 18, 28, 3, 16, 28, 2, 16, 29, 3 );
+   }
+   if (enemies_defeated['f4'] === undefined) {
+      e = addEnemy( 18, 24, 3, 'f4' );
+      enemyCreatePath( e, 16, 24, 2, 16, 26, 1, 18, 26, 0, 18, 24, 3 );
+   }
+
+   if (enemies_defeated['g1'] === undefined) {
+      e = addEnemy( 3, 25, 1, 'g1' );
+      enemyCreatePath( e, 7, 25, 3, 2, 25, 1 );
+   }
+   if (enemies_defeated['g2'] === undefined) {
+      e = addEnemy( 3, 37, 1, 'g2' );
+      enemyCreatePath( e, 7, 37, 3, 2, 37, 1 );
+   }
+   if (enemies_defeated['g3'] === undefined) {
+      e = addEnemy( 3, 28, 3, 'g3' );
+      enemyCreatePath( e, 2, 28, 2, 2, 31, 1, 5, 31, 2, 5, 34, 3, 2, 34, 0, 2, 31, 1, 5, 31, 0, 5, 28, 3 );
+   }
+   if (enemies_defeated['g4'] === undefined) {
+      e = addEnemy( 4, 31, 1, 'g4' );
+      enemyCreatePath( e, 5, 31, 2, 5, 34, 3, 2, 34, 0, 2, 31, 1, 5, 31, 0, 5, 28, 3, 2, 28, 2, 2, 31, 1 );
+   }
+   if (enemies_defeated['g5'] === undefined) {
+      e = addEnemy( 2, 33, 0, 'g5' );
+      enemyCreatePath( e, 2, 31, 1, 5, 31, 0, 5, 28, 3, 2, 28, 2, 2, 31, 1, 5, 31, 2, 5, 34, 3, 2, 34, 0 );
+   }
+
+   if (enemies_defeated['h1'] === undefined) {
+      e = addEnemy( 14, 34, 0, 'h1' );
+      enemyCreatePath( e, 14, 32, 1, 16, 32, 2, 16, 34, 3, 14, 34, 0 );
+   }
+   if (enemies_defeated['h2'] === undefined) {
+      e = addEnemy( 16, 32, 2, 'h2' );
+      enemyCreatePath( e, 16, 34, 3, 14, 34, 0, 14, 32, 1, 16, 32, 2 );
+   }
+
+   if (enemies_defeated['i1'] === undefined) {
+      e = addEnemy( 8, 48, 3, 'i1' );
+      enemyCreatePath( e, 3, 48, 1, 8, 48, 2, 8, 54, 3, 4, 54, 1, 8, 54, 0, 8, 48, 3 );
+   }
+   if (enemies_defeated['i2'] === undefined) {
+      e = addEnemy( 1, 58, 0, 'i2' );
+      enemyCreatePath( e, 1, 46, 1, 10, 46, 2, 10, 58, 3, 1, 58, 0 );
+   }
+   if (enemies_defeated['i3'] === undefined) {
+      e = addEnemy( 1, 50, 0, 'i3' );
+      enemyCreatePath( e, 1, 46, 1, 10, 46, 2, 10, 56, 3, 3, 56, 0, 3, 52, 1, 6, 52, 0, 6, 50, 3, 1, 50, 0 );
+   }
+
+   if (enemies_defeated['j1'] === undefined) {
+      e = addEnemy( 21, 41, 0, 'j1' );
+      enemyCreatePath( e, 21, 37, 2, 21, 45, 0 );
+   }
+   if (enemies_defeated['j2'] === undefined) {
+      e = addEnemy( 23, 41, 0, 'j2' );
+      enemyCreatePath( e, 23, 38, 2, 23, 45, 0 );
+   }
+   if (enemies_defeated['j3'] === undefined) {
+      e = addEnemy( 25, 41, 0, 'j3' );
+      enemyCreatePath( e, 25, 38, 2, 25, 44, 0 );
+   }
+   if (enemies_defeated['j4'] === undefined) {
+      e = addEnemy( 27, 41, 0, 'j4' );
+      enemyCreatePath( e, 27, 37, 2, 27, 43, 0 );
+   }
+   if (enemies_defeated['j5'] === undefined) {
+      e = addEnemy( 29, 41, 0, 'j5' );
+      enemyCreatePath( e, 29, 38, 1, 31, 38, 2, 31, 44, 3, 29, 44, 0 );
+   }
+   if (enemies_defeated['j6'] === undefined) {
+      e = addEnemy( 31, 41, 2, 'j6' );
+      enemyCreatePath( e, 31, 44, 3, 29, 44, 0, 29, 38, 1, 31, 38, 2 );
+   }
+
+   if (enemies_defeated['k1'] === undefined) {
+      e = addEnemy( 15, 50, 3, 'k1' );
+      enemyCreatePath( e, 14, 50, 2, 14, 54, 1, 20, 54, 2, 20, 56, 3, 16, 56, 0, 16, 50, 3 );
+   }
+   if (enemies_defeated['k2'] === undefined) {
+      e = addEnemy( 18, 53, 0, 'k2' );
+      enemyCreatePath( e, 18, 52, 3, 14, 52, 2, 14, 56, 1, 16, 56, 0, 16, 54, 1, 18, 54, 0 );
+   }
+
+   // The Ballroom
+   if (enemies_defeated['l1'] === undefined) {
+      e = addEnemy( 31, 49, 2, 'l1' );
+      enemyCreatePath( e, 31, 50, 0, 31, 49, 2 );
+   }
+   if (enemies_defeated['l2'] === undefined) {
+      e = addEnemy( 31, 57, 0, 'l2' );
+      enemyCreatePath( e, 31, 56, 2, 31, 57, 0 );
+   }
+   if (enemies_defeated['l3'] === undefined) {
+      e = addEnemy( 42, 49, 2, 'l3' );
+      enemyCreatePath( e, 42, 50, 0, 42, 49, 2 );
+   }
+   if (enemies_defeated['l4'] === undefined) {
+      e = addEnemy( 42, 57, 0, 'l4' );
+      enemyCreatePath( e, 42, 55, 2, 42, 57, 0 );
+   }
+   if (enemies_defeated['l5'] === undefined) {
+      e = addEnemy( 37, 50, 3, 'l5' );
+      enemyCreatePath( e, 33, 50, 2, 33, 57, 1, 37, 57, 0, 37, 50, 3 );
+   }
+   if (enemies_defeated['l6'] === undefined) {
+      e = addEnemy( 38, 51, 3, 'l6' );
+      enemyCreatePath( e, 34, 51, 2, 34, 58, 1, 38, 58, 0, 38, 51, 3 );
+   }
+   if (enemies_defeated['l7'] === undefined) {
+      e = addEnemy( 37, 48, 1, 'l7' );
+      enemyCreatePath( e, 40, 48, 2, 40, 54, 3, 37, 54, 0, 37, 48, 1 );
+   }
+   if (enemies_defeated['l8'] === undefined) {
+      e = addEnemy( 36, 49, 1, 'l8' );
+      enemyCreatePath( e, 39, 49, 2, 39, 55, 3, 36, 55, 0, 36, 49, 1 );
+   }
+   if (enemies_defeated['l9'] === undefined) {
+      e = addEnemy( 40, 53, 3, 'l9' );
+      enemyCreatePath( e, 34, 53, 1, 40, 53, 3 );
+   }
+   if (enemies_defeated['l10'] === undefined) {
+      e = addEnemy( 41, 52, 3, 'l10' );
+      enemyCreatePath( e, 35, 52, 1, 41, 52, 3 );
+   }
+
+   if (enemies_defeated['m1'] === undefined) {
+      e = addEnemy( 49, 34, 0, 'm1' );
+      enemyCreatePath( e, 49, 33, 1, 56, 33, 2, 56, 40, 3, 52, 40, 0, 52, 36, 1, 53, 36, 2, 53, 37, 3, 51, 37, 2, 51, 39, 1, 57, 39, 0, 57, 34, 3, 49, 34, 0 );
+   }
+
+   if (enemies_defeated['n1'] === undefined) {
+      e = addEnemy( 39, 40, 0, 'n1' );
+      enemyCreatePath( e, 39, 22, 2, 39, 40, 0 );
+   }
+   if (enemies_defeated['n2'] === undefined) {
+      e = addEnemy( 40, 40, 0, 'n2' );
+      enemyCreatePath( e, 40, 22, 2, 40, 40, 0 );
+   }
+   if (enemies_defeated['n3'] === undefined) {
+      e = addEnemy( 41, 40, 0, 'n3' );
+      enemyCreatePath( e, 41, 22, 2, 41, 40, 0 );
+   }
+
+   if (enemies_defeated['o1'] === undefined) {
+      e = addEnemy( 36, 30, 3, 'o1' );
+      enemyCreatePath( e, 32, 30, 2, 32, 34, 1, 36, 34, 0, 36, 30, 3 );
+   }
+   if (enemies_defeated['o2'] === undefined) {
+      e = addEnemy( 32, 30, 2, 'o2' );
+      enemyCreatePath( e, 32, 34, 1, 36, 34, 0, 36, 30, 3, 32, 30, 2 );
+   }
+   if (enemies_defeated['o3'] === undefined) {
+      e = addEnemy( 32, 34, 1, 'o3' );
+      enemyCreatePath( e, 36, 34, 0, 36, 30, 3, 32, 30, 2, 32, 34, 1 );
+   }
+   if (enemies_defeated['o4'] === undefined) {
+      e = addEnemy( 36, 34, 0, 'o4' );
+      enemyCreatePath( e, 36, 30, 3, 32, 30, 2, 32, 34, 1, 36, 34, 0 );
+   }
+   if (enemies_defeated['o5'] === undefined) {
+      e = addEnemy( 33, 33, 0, 'o5' );
+      enemyCreatePath( e, 33, 31, 1, 35, 31, 2, 35, 33, 3, 33, 33, 0 );
+   }
+   if (enemies_defeated['o6'] === undefined) {
+      e = addEnemy( 33, 31, 1, 'o6' );
+      enemyCreatePath( e, 35, 31, 2, 35, 33, 3, 33, 33, 0, 33, 31, 1 );
+   }
+   if (enemies_defeated['o7'] === undefined) {
+      e = addEnemy( 35, 31, 2, 'o7' );
+      enemyCreatePath( e, 35, 33, 3, 33, 33, 0, 33, 31, 1, 35, 31, 2 );
+   }
+   if (enemies_defeated['o8'] === undefined) {
+      e = addEnemy( 35, 33, 3, 'o8' );
+      enemyCreatePath( e, 33, 33, 0, 33, 31, 1, 35, 31, 2, 35, 33, 3 );
+   }
+
+   if (enemies_defeated['p1'] === undefined) {
+      e = addEnemy( 55, 22, 3, 'p1' );
+      enemyCreatePath( e, 49, 22, 2, 49, 23, 1, 51, 23, 2, 51, 24, 3, 49, 24, 2, 49, 25, 1, 55, 25, 0, 55, 24, 3, 53, 24, 0, 53, 23, 1, 55, 23, 0, 55, 22, 3 );
+   }
+   if (enemies_defeated['p2'] === undefined) {
+      e = addEnemy( 49, 23, 1, 'p2' );
+      enemyCreatePath( e, 51, 23, 2, 51, 24, 3, 49, 24, 2, 49, 25, 1, 55, 25, 0, 55, 24, 3, 53, 24, 0, 53, 23, 1, 55, 23, 0, 55, 22, 3, 49, 22, 2, 49, 23, 1 );
+   }
+   if (enemies_defeated['p3'] === undefined) {
+      e = addEnemy( 51, 24, 3, 'p3' );
+      enemyCreatePath( e, 49, 24, 2, 49, 25, 1, 55, 25, 0, 55, 24, 3, 53, 24, 0, 53, 23, 1, 55, 23, 0, 55, 22, 3, 49, 22, 2, 49, 23, 1, 51, 23, 2, 51, 24, 3 );
+   }
+   if (enemies_defeated['p4'] === undefined) {
+      e = addEnemy( 49, 25, 1, 'p4' );
+      enemyCreatePath( e, 55, 25, 0, 55, 24, 3, 53, 24, 0, 53, 23, 1, 55, 23, 0, 55, 22, 3, 49, 22, 2, 49, 23, 1, 51, 23, 2, 51, 24, 3, 49, 24, 2, 49, 25, 1 );
+   }
+   if (enemies_defeated['p5'] === undefined) {
+      e = addEnemy( 55, 24, 3, 'p5' );
+      enemyCreatePath( e, 53, 24, 0, 53, 23, 1, 55, 23, 0, 55, 22, 3, 49, 22, 2, 49, 23, 1, 51, 23, 2, 51, 24, 3, 49, 24, 2, 49, 25, 1, 55, 25, 0, 55, 24, 3 );
+   }
+   if (enemies_defeated['p6'] === undefined) {
+      e = addEnemy( 53, 23, 1, 'p6' );
+      enemyCreatePath( e, 55, 23, 0, 55, 22, 3, 49, 22, 2, 49, 23, 1, 51, 23, 2, 51, 24, 3, 49, 24, 2, 49, 25, 1, 55, 25, 0, 55, 24, 3, 53, 24, 0, 53, 23, 1 );
+   }
+
+   // Final Fort
+   if (enemies_defeated['q1'] === undefined) {
+      e = addEnemy( 45, 1, 3, 'q1' );
+      enemyCreatePath( e, 36, 1, 2, 36, 6, 2, 36, 11, 1, 43, 11, 1, 54, 11, 0, 54, 6, 0, 54, 1, 3, 45, 1, 3 );
+   }
+   if (enemies_defeated['q2'] === undefined) {
+      e = addEnemy( 43, 11, 1, 'q2' );
+      enemyCreatePath( e, 54, 11, 0, 54, 6, 0, 54, 1, 3, 45, 1, 3, 36, 1, 2, 36, 6, 2, 36, 11, 1, 43, 11, 1 );
+   }
+   if (enemies_defeated['q3'] === undefined) {
+      e = addEnemy( 54, 6, 1, 'q3' );
+      enemyCreatePath( e, 54, 1, 3, 45, 1, 3, 36, 1, 2, 36, 6, 2, 36, 10, 1, 43, 10, 1, 54, 10, 0, 54, 6, 0 );
+   }
+   if (enemies_defeated['q4'] === undefined) {
+      e = addEnemy( 36, 6, 2, 'q4' );
+      enemyCreatePath( e, 36, 10, 1, 43, 10, 1, 54, 10, 0, 54, 6, 0, 54, 1, 3, 45, 1, 3, 36, 1, 2, 36, 6, 2 );
+   }
+   if (enemies_defeated['q5'] === undefined) {
+      e = addEnemy( 39, 7, 3, 'q5' );
+      enemyCreatePath( e, 38, 7, 1, 39, 7, 3 );
+   }
+   if (enemies_defeated['q6'] === undefined) {
+      e = addEnemy( 39, 8, 3, 'q6' );
+      enemyCreatePath( e, 38, 8, 1, 39, 8, 3 );
+   }
+   if (enemies_defeated['q7'] === undefined) {
+      e = addEnemy( 52, 7, 3, 'q7' );
+      enemyCreatePath( e, 51, 7, 1, 52, 7, 3 );
+   }
+   if (enemies_defeated['q8'] === undefined) {
+      e = addEnemy( 52, 8, 3, 'q8' );
+      enemyCreatePath( e, 51, 8, 1, 52, 8, 3 );
+   }
+   if (enemies_defeated['q9'] === undefined) {
+      e = addEnemy( 41, 7, 2, 'q9' );
+      enemyCreatePath( e, 41, 8, 1, 43, 8, 0, 43, 7, 3, 41, 7, 2 );
+   }
+   if (enemies_defeated['q10'] === undefined) {
+      e = addEnemy( 43, 8, 0, 'q10' );
+      enemyCreatePath( e, 43, 7, 3, 41, 7, 2, 41, 8, 1, 43, 8, 0 );
+   }
+   if (enemies_defeated['q11'] === undefined) {
+      e = addEnemy( 41, 5, 2, 'q11' );
+      enemyCreatePath( e, 41, 6, 1, 43, 6, 0, 43, 5, 3, 41, 5, 2 );
+   }
+   if (enemies_defeated['q12'] === undefined) {
+      e = addEnemy( 43, 6, 0, 'q12' );
+      enemyCreatePath( e, 43, 5, 3, 41, 5, 2, 41, 6, 1, 43, 6, 0 );
+   }
+   if (enemies_defeated['q13'] === undefined) {
+      e = addEnemy( 49, 7, 2, 'q13' );
+      enemyCreatePath( e, 49, 8, 3, 47, 8, 0, 47, 7, 1, 49, 7, 2 );
+   }
+   if (enemies_defeated['q14'] === undefined) {
+      e = addEnemy( 47, 8, 0, 'q14' );
+      enemyCreatePath( e, 47, 7, 1, 49, 7, 2, 49, 8, 3, 47, 8, 0 );
+   }
+   if (enemies_defeated['q15'] === undefined) {
+      e = addEnemy( 49, 5, 2, 'q15' );
+      enemyCreatePath( e, 49, 6, 3, 47, 6, 0, 47, 5, 1, 49, 5, 2 );
+   }
+   if (enemies_defeated['q16'] === undefined) {
+      e = addEnemy( 47, 6, 0, 'q16' );
+      enemyCreatePath( e, 47, 5, 1, 49, 5, 2, 49, 6, 3, 47, 6, 0 );
+   }
+   if (enemies_defeated['q17'] === undefined) {
+      e = addEnemy( 44, 3, 1, 'q17' );
+      enemyCreatePath( e, 45, 3, 1, 46, 3, 3, 45, 3, 3, 44, 3, 1 );
+      e.alwayswary = true;
    }
 }
 
@@ -450,34 +802,45 @@ function drawPaths()
          }
       }
    }
-   /*
-   map[1][2].t = 0;
-   map[1][3].t = 0;
-   map[4][2].t = 0;
-   map[4][3].t = 0;
-   map[5][2].t = 0;
-   map[6][2].t = 0;
-   map[7][2].t = 0;
-   map[2][3].t = 0;
-   map[3][2].t = 0;
+}
 
-   map[1][2].room = 1;
-   map[1][3].room = 1;
-   map[4][2].room = 1;
-   map[4][3].room = 1;
-   map[5][2].room = 1;
-   map[6][2].room = 1;
-   map[7][2].room = 1;
-   map[2][3].room = 1;
-   map[3][2].room = 1;
+function setCheckpoints()
+{
+   map[1][1].checkpoint = true;
+   map[12][14].checkpoint = true;
+   map[16][40].checkpoint = true;
+   map[26][55].checkpoint = true;
+   map[41][42].checkpoint = true;
+   map[46][13].checkpoint = true;
+}
 
-   for (var i = 1; i <= 12; ++i) {
-      map[i][1].t = 0;
-      map[i][4].t = 0;
-      map[i][1].room = 1;
-      map[i][4].room = 1;
+function warpToCheckpoint( i )
+{
+   var x, y;
+   if ( i === 2 ) {
+      x = 12;
+      y = 14;
+   } else if ( i === 3 ) {
+      x = 16;
+      y = 40;
+   } else if ( i === 4 ) {
+      x = 26;
+      y = 55;
+   } else if ( i === 5 ) {
+      x = 41;
+      y = 42;
+   } else if ( i === 6 ) {
+      x = 46;
+      y = 13;
+   } else {
+      x = 1;
+      y = 1;
    }
-   */
+
+   if (player_state === 'hop')
+      mapAt( player_x, player_y, player_facing ).unit = undefined;
+
+   playerMove( x, y );
 }
 
 function findEdge( x, y )
@@ -662,7 +1025,7 @@ function drawPlayer() {
       if (player_facing === 2)
          pl_anim_eat[2].draw( middle, middle );
       if (player_facing === 3)
-         pl_anim_eat[3].draw( middle + BLOCK_SIZE, middle );
+         pl_anim_eat[3].draw( middle - BLOCK_SIZE, middle );
    }
 }
 
@@ -717,11 +1080,12 @@ function playerChangeState( state )
          player_state = state;
          player_next_state = undefined;
 
-         var rand = (Math.random()<0.5)?0:1;
-         snd_slurps[rand].currentTime = 0;
-         snd_slurps[rand].volume = 1.0;
-         snd_slurps[rand].play();
-
+         if (!muted) {
+            var rand = (Math.random()<0.5)?0:1;
+            snd_slurps[rand].currentTime = 0;
+            snd_slurps[rand].volume = 1.0;
+            snd_slurps[rand].play();
+         }
 
       } else if (player_lag <= 0) {
          player_state = state;
@@ -747,13 +1111,19 @@ function playerMove( x, y )
    player_offset_y = 0;
    hop_index = 0;
 
-   // Coin sound
-   which_sound = (which_sound + 1) % 7;
-   snd_coins[which_sound].currentTime = 0;
-   snd_coins[which_sound].volume = 0.3;
-   snd_coins[which_sound].play();
+   if (map[x][y].checkpoint) {
+      checkpoint.x = x;
+      checkpoint.y = y;
+   }
 
-   // Alert nearby enemies
+   // Coin sound
+   if (!muted) {
+      which_sound++;
+      snd_coins[which_sound % 7].currentTime = 0;
+      snd_coins[which_sound % 7].volume = 0.3;
+      snd_coins[which_sound % 7].play();
+   }
+
    for (var j = x - 3; j <= x + 3; ++j) {
       if (j < 0 || j >= MAP_WIDTH) continue;
       for (var k = y - 3; k <= y + 3; ++k) {
@@ -761,8 +1131,10 @@ function playerMove( x, y )
 
          var enemy = map[j][k].unit;
          if (enemy !== undefined && enemy !== 'player' && enemy.mental_state !== 'aggro') {
-            enemy.alerted = { x: x, y: y };
-            enemy.paranoia++;
+            if ( Math.abs( j-x ) !== 3 || Math.abs( k-y ) !== 3 ) { // ez distance, ignore corners
+               enemy.alerted = { x: x, y: y };
+               enemy.paranoia++;
+            }
          }
       }
    }
@@ -828,7 +1200,8 @@ function Enemy( x, y, face, id ) {
    this.path = []; // [ { face, x, y } ... ]
    this.chasepath = []; // [ { face, x, y } ... ]
 
-   this.los = 4; // How many squares ahead he can see
+   this.los = 5; // How many squares ahead he can see
+   this.current_los = 5; // How many squares are currently visible
 
    this.hop_index = 0;
    this.offset_x = 0;
@@ -879,7 +1252,10 @@ function drawEnemy( enemy, x, y )
       }
    }
    // Draw enemy sprite
-   context.drawImage( enemy_images[enemy.facing], x, y );
+   if (enemy.facing === undefined || enemy.facing < 0 || enemy.facing > 3)
+      context.drawImage( enemy_images[0], x, y );
+   else
+      context.drawImage( enemy_images[enemy.facing], x, y );
 
    if (enemy.state !== 'greedy_kill' && enemy.state !== 'aggro_kill') {
       // Draw vision dots
@@ -892,6 +1268,9 @@ function drawEnemy( enemy, x, y )
       if (enemy.facing === 1) dx = (BLOCK_SIZE / 2.1);
 
       for (var i = 0; i < enemy.los * 2; ++i) {
+         if (i > enemy.current_los * 2)
+            break;
+
          x += dx;
          y += dy;
          context.beginPath();
@@ -924,7 +1303,8 @@ function enemyCheckVision( enemy )
    if (enemy.facing === 1) dx = 1;
 
    var seen = false;
-   for (var i = 0; i < enemy.los; ++i) {
+   var i;
+   for (i = 0; i < enemy.los; ++i) {
       x += dx;
       y += dy;
       if (x < 0 || y < 0 || x >= MAP_WIDTH || y >= MAP_HEIGHT)
@@ -943,10 +1323,13 @@ function enemyCheckVision( enemy )
                enemy.lag = 0;
                enemy.state = 'waiting';
                enemy.next_state = 'waiting';
-               var player_distance = Math.pow((enemy.x - player_x), 2) + Math.pow((enemy.y - player_y), 2 );
-               snd_aggro[enemy.voice].currentTime = 0;
-               snd_aggro[enemy.voice].volume = (81 - player_distance) / 81;
-               snd_aggro[enemy.voice].play();
+
+               if (!muted) {
+                  var player_distance = Math.sqrt( Math.pow((enemy.x - player_x), 2) + Math.pow((enemy.y - player_y), 2 ) );
+                  snd_aggro[enemy.voice].currentTime = 0;
+                  snd_aggro[enemy.voice].volume = (9 - player_distance) / 11;
+                  snd_aggro[enemy.voice].play();
+               }
 
                enemy.alerted = undefined;
             }
@@ -962,9 +1345,12 @@ function enemyCheckVision( enemy )
                enemy.state = 'waiting';
                enemy.next_state = 'waiting';
                enemy.next_facing = enemy.facing;
-               snd_greed[enemy.voice % 3].currentTime = 0;
-               snd_greed[enemy.voice % 3].volume = 1;
-               snd_greed[enemy.voice % 3].play();
+               if (!muted) {
+                  var player_distance = Math.sqrt( Math.pow((enemy.x - player_x), 2) + Math.pow((enemy.y - player_y), 2 ) );
+                  snd_greed[enemy.voice % 3].currentTime = 0;
+                  snd_greed[enemy.voice % 3].volume = (9 - player_distance) / 11;
+                  snd_greed[enemy.voice % 3].play();
+               }
 
                enemy.alerted = undefined;
             }
@@ -973,6 +1359,8 @@ function enemyCheckVision( enemy )
       if (map[x][y].t !== 0)
          break; // Can't see through walls
    }
+
+   enemy.current_los = i;
 
    if (enemy.mental_state === 'greedy' && !seen) {
       enemy.mental_state = 'aggro';
@@ -1075,19 +1463,20 @@ function updateEnemy( enemy, dt )
 
          enemy.state = 'lookingaround';
          enemy.next_state = 'waiting';
-         enemy.lag = 100;
+         enemy.lag = 80;
 
          enemy.alerted = undefined;
 
          // Sound: Huh? only play if you don't also spot the mimic
          enemyCheckVision( enemy );
 
-         if (enemy.mental_state !== 'aggro' && enemy.mental_state !== 'greedy') {
-            var player_distance = Math.pow((enemy.x - player_x), 2) + Math.pow((enemy.y - player_y), 2 );
-            if (player_distance <= 81) {
-               snd_huhs[enemy.voice % 2].currentTime = 0;
-               snd_huhs[enemy.voice % 2].volume = (81 - player_distance) / 81;
-               snd_huhs[enemy.voice % 2].play();
+         if (!muted && enemy.mental_state !== 'aggro' && enemy.mental_state !== 'greedy') {
+            var player_distance = Math.sqrt( Math.pow((enemy.x - player_x), 2) + Math.pow((enemy.y - player_y), 2 ) );
+            if (player_distance <= 9) {
+               which_sound++;
+               snd_huhs[which_sound % 5].currentTime = 0;
+               snd_huhs[which_sound % 5].volume = (9 - player_distance) / 11;
+               snd_huhs[which_sound % 5].play();
             }
          }
       }
@@ -1139,12 +1528,14 @@ function enemyMove( enemy, x, y )
    enemy.state = 'waiting';
 
    // Sound: step
-   var player_distance = Math.pow((x - player_x), 2) + Math.pow((y - player_y), 2 );
-   if (player_distance <= 81) {
-      next_footstep = (next_footstep + 1) % 4;
-      snd_footsteps[next_footstep].currentTime = 0;
-      snd_footsteps[next_footstep].volume = ( 81 - player_distance ) / 81;
-      snd_footsteps[next_footstep].play();
+   if (!muted) {
+      var player_distance = Math.sqrt( Math.pow((x - player_x), 2) + Math.pow((y - player_y), 2 ) );
+      if (player_distance <= 9) {
+         next_footstep = (next_footstep + 1) % 3;
+         snd_footsteps[next_footstep].currentTime = 0;
+         snd_footsteps[next_footstep].volume = ( 9 - player_distance ) / 9;
+         snd_footsteps[next_footstep].play();
+      }
    }
 
    if (x === enemy.path[0].x && y === enemy.path[0].y 
@@ -1156,7 +1547,7 @@ function enemyMove( enemy, x, y )
       // Setup next move
       enemy.next_facing = path_point.face;
       enemy.next_state = 'waiting';
-      enemy.lag = 100;
+      enemy.lag = 80;
 
       enemy.chasepath = []; // Clear, since we're on the main path
       if (enemy.mental_state === 'wary')
@@ -1194,7 +1585,7 @@ function enemyMove( enemy, x, y )
             enemy.next_state = 'waiting';
          } else {
             enemy.next_facing = way_back;
-            enemy.lag = 100;
+            enemy.lag = 80;
             enemy.next_state = 'waiting';
          }
 
@@ -1206,12 +1597,11 @@ function enemyMove( enemy, x, y )
          // Lost him
          enemy.mental_state = 'wary';
          enemy.next_facing = (enemy.facing + 2) % 4;
-         enemy.lag = 100;
+         enemy.lag = 80;
          enemy.next_state = 'waiting';
       }
       
    } else if (enemy.mental_state === 'greedy') {
-      enemy.lag = 40;
       if (mapAt( x, y, enemy.facing ).unit === 'player') {
          // You kill him
          enemy.state = 'greedy_kill';
@@ -1229,23 +1619,24 @@ function enemyMove( enemy, x, y )
 
       enemy.state = 'lookingaround';
       enemy.next_state = 'waiting';
-      enemy.lag = 100;
+      enemy.lag = 80;
 
       enemy.alerted = undefined;
 
       // Sound: Huh? only play if you don't also spot the mimic
       enemyCheckVision( enemy );
 
-      if (enemy.mental_state !== 'aggro' && enemy.mental_state !== 'greedy') {
-         var player_distance = Math.pow((enemy.x - player_x), 2) + Math.pow((enemy.y - player_y), 2 );
-         if (player_distance <= 81) {
-            snd_huhs[enemy.voice % 2].currentTime = 0;
-            snd_huhs[enemy.voice % 2].volume = (81 - player_distance) / 81;
-            snd_huhs[enemy.voice % 2].play();
+      if (!muted && enemy.mental_state !== 'aggro' && enemy.mental_state !== 'greedy') {
+         var player_distance = Math.sqrt( Math.pow((enemy.x - player_x), 2) + Math.pow((enemy.y - player_y), 2 ) );
+         if (player_distance <= 9) {
+            which_sound++;
+            snd_huhs[which_sound % 5].currentTime = 0;
+            snd_huhs[which_sound % 5].volume = (9 - player_distance) / 11;
+            snd_huhs[which_sound % 5].play();
          }
       }
 
-   } else if (enemy.mental_state === 'wary') {
+   } else if (enemy.mental_state === 'wary' || enemy.alwayswary) {
       if (Math.random() < 0.2) {
          // Random turn
          var pos_turns = [];
@@ -1263,7 +1654,7 @@ function enemyMove( enemy, x, y )
          enemy.facing = (enemy.facing + pos_turns[Math.floor( Math.random() * pos_turns.length )] ) % 4;
 
          enemy.state = 'lookingaround';
-         enemy.lag = 100;
+         enemy.lag = 80;
          enemy.next_state = 'waiting';
 
          enemy.paranoia--;
@@ -1273,7 +1664,6 @@ function enemyMove( enemy, x, y )
    }
 
    if (mapAt( x, y, enemy.facing ).t !== 0) {
-      var pos_turns = [];
       if (mapAt(x, y, (enemy.facing + 1) % 4).t === 0 ) // Turn right
          enemy.facing = (enemy.facing + 1) % 4;
       else if (mapAt(x, y, (enemy.facing + 2) % 4).t === 0 ) // About face
@@ -1309,53 +1699,77 @@ function updateWinCondition()
       return false;
 }
 
+function respawn()
+{
+   spawnEnemies();
+   player_x = checkpoint.x;
+   player_y = checkpoint.y;
+   player_state = 'idle';
+   map[player_x][player_y].unit = 'player';
+
+   points = Math.floor( points / 2 );
+   game_over = false;
+}
+
 /////////////////////////////////////////////////////////////////////
 // Controls ---
 
-var shift_down = false;
+var space_down = false;
 
 function onKeyDown( e ) {
-   LOG.html( "DOWN: " + e.which );
-
-   if (player_state !== 'closed' && player_state !== 'hop') {
-      if ( e.which === 16 ) {
-         shift_down = true;
+   // Accept Space/Shift, and Arrows/ASDF
+   if (game_over && !game_complete && e.which === 13) {
+      respawn();
+   } else if (player_state !== 'closed' && player_state !== 'hop' && player_state !== 'eating') {
+      if ( e.which === 32 || e.which === 16 ) {
+         space_down = true;
          playerChangeState( 'closed' );
       }
-      else if ( e.which === 38 ) {
+      else if ( e.which === 38 || e.which === 87 ) {
          // Up
          player_facing = 0;
          playerTryHop();
       }
-      else if ( e.which === 39 ) {
+      else if ( e.which === 39 || e.which === 68  ) {
          // Right
          player_facing = 1;
          playerTryHop();
       }
-      else if ( e.which === 40 ) {
+      else if ( e.which === 40 || e.which === 83 ) {
          // Down
          player_facing = 2;
          playerTryHop();
       }
-      else if ( e.which === 37 ) {
+      else if ( e.which === 37 || e.which === 65 ) {
          // Left
          player_facing = 3;
          playerTryHop();
+      }
+      else if (e.which >= 49 && e.which <= 54) {
+         warpToCheckpoint( e.which - 48 );
       }
    }
 }
 $(document).keydown( onKeyDown );
 
 function onKeyUp( e ) {
-   LOG.html( "UP: " + e.which );
-
-   if ( e.which === 16 ) {
-      shift_down = false;
+   if ( (e.which === 32 || e.which === 16) && player_state !== 'eating' ) {
+      space_down = false;
       playerChangeState( 'idle' );
    }
 }
 $(document).keyup( onKeyUp );
 
+var onClick = function( e ) {
+   var x_pix = e.pageX - canvas.offsetLeft;
+   var y_pix = e.pageY - canvas.offsetTop;
+
+   if (x_pix > 560 && y_pix < 40)
+      toggleMute();
+   else if (x_pix > 560 && y_pix < 80)
+      toggleMusicMute();
+}
+$('#mimic_canvas').click( onClick ); 
 /////////////////////////////////////////////////////////////////////
 // Draw ---
 
@@ -1370,6 +1784,105 @@ function drawFloor()
 {
    context.fillStyle = "gray";
    context.fillRect( -BLOCK_SIZE, -BLOCK_SIZE, 600 + (BLOCK_SIZE * 2), 600 + (BLOCK_SIZE * 2) );
+}
+
+function drawGui()
+{
+   context.strokeStyle = 'black';
+   context.lineWidth = 2;
+
+   context.fillStyle = "rgba(255,204,0,1)";
+   context.font = "32px arial";
+   context.strokeText(points, 8 + player_offset_x, 36 + player_offset_y);
+   context.fillText(points, 8 + player_offset_x, 36 + player_offset_y);
+
+   if (muted)
+      context.drawImage( img_nosound, 565 + player_offset_x, 5 + player_offset_y );
+   else
+      context.drawImage( img_sound, 565 + player_offset_x, 5 + player_offset_y );
+
+   if (music_muted)
+      context.drawImage( img_nomusic, 565 + player_offset_x, 45 + player_offset_y );
+   else
+      context.drawImage( img_music, 565 + player_offset_x, 45 + player_offset_y );
+
+   if (enemies.length > 0) {
+      context.fillStyle = "white";
+      context.font = "18px arial";
+      var enemy_string = enemies.length + ' adventurers remain';
+      var width = enemy_string.width( "18px arial" );
+
+      context.strokeText( enemy_string, 596 - width + player_offset_x, 596 + player_offset_y );
+      context.fillText( enemy_string, 596 - width + player_offset_x, 596 + player_offset_y );
+   }
+
+   if (game_over && !game_complete) {
+      context.fillStyle = "rgba(205,0,0,1)";
+      fitText( context, "You have been slain", 150, 450, 130, 48, "48px arial", true, true, false );
+      fitText( context, "Press Enter to respawn", 150, 450, 375, 32, "32px arial", true, true, false); 
+   } else if (game_over && game_complete) {
+      context.fillStyle = "white";
+      fitText( context, "That's the lot of em! Delicious!", 150, 450, 50, 56, "56px arial", true, true, false );
+      fitText( context, "Thanks for playing!", 150, 450, 460, 36, "36px arial", true, true, false );
+   }
+}
+
+String.prototype.width = function(font) {
+  var f = font || '12px arial',
+      o = $('<div>' + this + '</div>')
+            .css({'position': 'absolute', 'float': 'left', 'white-space': 'nowrap', 'visibility': 'hidden', 'font': f})
+            .appendTo($('body')),
+      w = o.width();
+
+  o.remove();
+
+  return w;
+}
+   
+function fitText( context, text, x_min, x_max, y_min, font_size, font, centered, stroke, first_line_offset )
+{
+   var text_split = text.split(' ');
+   var text_bit = '', text_bit_temp = '';
+   var text_width = 0;
+   var y = y_min + font_size;
+
+   context.font = font;
+
+   for (var i = 0; i < text_split.length; ++i) {
+      text_bit_temp += text_split[i];
+      text_width = text_bit_temp.width( font );
+      if (text_width + x_min > x_max) { // Can't add that bit
+         if (centered) {
+            if (stroke)
+               context.strokeText( text_bit, (x_min + x_max - text_bit.width( font )) / 2 , y );
+            context.fillText( text_bit, (x_min + x_max - text_bit.width( font )) / 2 , y );
+         } else {
+            if (stroke)
+               context.strokeText( text_bit, x_min, y );
+            context.fillText( text_bit, x_min, y );
+         }
+
+         text_bit = text_bit_temp = text_split[i] + ' ';
+         y += font_size;
+      } else {
+         text_bit_temp += ' ';
+         text_bit = text_bit_temp;
+      }
+   }
+   if (text_bit) {
+      if (centered) {
+         if (stroke)
+            context.strokeText( text_bit, (x_min + x_max - text_bit.width( font )) / 2 , y );
+         context.fillText( text_bit, (x_min + x_max - text_bit.width( font )) / 2 , y );
+      } else {
+         if (stroke)
+            context.strokeText( text_bit, x_min, y );
+         context.fillText( text_bit, x_min, y );
+      }
+
+      return y;
+   }
+   return y - font_size;
 }
 
 /////////////////////////////////////////////////////////////////////
@@ -1411,6 +1924,8 @@ var draw = function() {
       }
       draw_x += BLOCK_SIZE;
    }
+
+   drawGui();
 }
 
 var update = function( dt ) {
@@ -1426,10 +1941,8 @@ var update = function( dt ) {
 var main = function() {
    requestAnimationFrame( main );
 
-   if (!game_over) {
-      update( 17 );
-      draw();
-   }
+   update( 17 );
+   draw();
 }
 
 function start() {
@@ -1529,3 +2042,8 @@ loadImage( img_rock1, 'Rock1.png' );
 loadImage( img_rock2, 'Rock2.png' );
 loadImage( img_rock3, 'Rock3.png' );
 loadImage( img_inside, 'Inside.png' );
+
+loadImage( img_sound, 'Sound.png' );
+loadImage( img_nosound, 'NoSound.png' );
+loadImage( img_music, 'Music.png' );
+loadImage( img_nomusic, 'NoMusic.png' );
