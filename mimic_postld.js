@@ -1113,7 +1113,7 @@ function playerChangeState( state )
       } else if (player_lag <= 0) {
          player_state = state;
          player_next_state = undefined;
-         player_lag = 4;
+         player_lag = 3;
       } else {
          player_next_state = state;
       }
@@ -1160,6 +1160,29 @@ function playerMove( x, y )
             }
          }
       }
+   }
+
+   // Check for instant next move by held keys
+   if (player_facing === 0 && up_held)
+      playerTryHop();
+   else if (player_facing === 1 && right_held)
+      playerTryHop();
+   else if (player_facing === 2 && down_held)
+      playerTryHop();
+   else if (player_facing === 3 && left_held)
+      playerTryHop();
+   else if (up_held && !right_held && !down_held && !left_held) {
+      player_facing = 0;
+      playerTryHop();
+   } else if (!up_held && right_held && !down_held && !left_held) {
+      player_facing = 1;
+      playerTryHop();
+   } else if (!up_held && !right_held && down_held && !left_held) {
+      player_facing = 2;
+      playerTryHop();
+   } else if (!up_held && !right_held && !down_held && left_held) {
+      player_facing = 3;
+      playerTryHop();
    }
 }
 
@@ -1741,6 +1764,11 @@ function respawn()
 var space_down = false;
 var hop_locked = false;
 
+var right_held = false;
+var left_held = false;
+var up_held = false;
+var down_held = false;
+
 function onKeyDown( e ) {
    // Accept Space/Shift, and Arrows/ASDF
    if (game_over && !game_complete && e.which === 13) {
@@ -1782,6 +1810,17 @@ function onKeyDown( e ) {
          warpToCheckpoint( e.which - 48 );
       }
    }
+
+   // Held key data
+   if ( e.which === 38 || e.which === 87 )
+      up_held = true;
+   if ( e.which === 39 || e.which === 68 )
+      right_held = true;
+   if ( e.which === 40 || e.which === 83 )
+      down_held = true;
+   if ( e.which === 37 || e.which === 65 )
+      left_held = true;
+
 }
 $(document).keydown( onKeyDown );
 
@@ -1790,6 +1829,16 @@ function onKeyUp( e ) {
       space_down = false;
       playerChangeState( 'idle' );
    }
+
+   // Held key data
+   if ( e.which === 38 || e.which === 87 )
+      up_held = false;
+   if ( e.which === 39 || e.which === 68 )
+      right_held = false;
+   if ( e.which === 40 || e.which === 83 )
+      down_held = false;
+   if ( e.which === 37 || e.which === 65 )
+      left_held = false;
 }
 $(document).keyup( onKeyUp );
 
