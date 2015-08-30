@@ -1,7 +1,7 @@
 'use strict';
 
-var canvas = $('#mimic_canvas')[0]
-var context = canvas.getContext('2d');
+var mimic_canvas = $('#mimic_canvas')[0]
+var mimic_context = mimic_canvas.getContext('2d');
 
 /////////////////////////////////////////////////////////////////////
 // Images ---
@@ -210,7 +210,7 @@ Animation.prototype.update = function ( dt ) {
 
 Animation.prototype.draw = function ( x, y ) {
    var image = this.images[ Math.floor( this.cur / this.interval ) ];
-   context.drawImage( image, x, y );
+   mimic_context.drawImage( image, x, y );
 }
 
 // Terrain --
@@ -272,25 +272,25 @@ function drawTerrain( t, x, y )
          image = img_rock3;
          break;
       case -1:
-         //context.fillStyle = 'rgba(85,34,0,1)';
+         //mimic_context.fillStyle = 'rgba(85,34,0,1)';
          image = img_inside;
          break;
       case -2:
-         context.fillStyle = 'black';
-         context.fillRect( x, y, BLOCK_SIZE + 1, BLOCK_SIZE + 1 );
+         mimic_context.fillStyle = 'black';
+         mimic_context.fillRect( x, y, BLOCK_SIZE + 1, BLOCK_SIZE + 1 );
       case 0:
       default:
          return;
    }
 
    if (image !== undefined) {
-      context.drawImage( image, x, y );
+      mimic_context.drawImage( image, x, y );
    }
 }
 
 function drawFog( x, y ) {
-   context.fillStyle = 'rgba(85,85,85,0.5)';
-   context.fillRect( x, y, BLOCK_SIZE, BLOCK_SIZE );
+   mimic_context.fillStyle = 'rgba(85,85,85,0.5)';
+   mimic_context.fillRect( x, y, BLOCK_SIZE, BLOCK_SIZE );
 }
 
 // MapLoc --
@@ -443,6 +443,29 @@ function initMap( mapfile )
    spawnEnemies();
 }
 initMap();
+
+function checkIntegrity()
+{
+   // Maybe a little excessive but whatever
+   for (var x = 0; x < MAP_WIDTH ; ++x) {
+      for (var y = 0; y < MAP_HEIGHT ; ++y) { 
+         var unit = map[x][y].unit;
+         if (unit !== undefined) {
+            if (unit === 'player') {
+               if ((player_x !== x || player_y !== y)
+                     && player_state !== 'hop') {
+                  map[x][y].unit = undefined;
+               }
+            } else {
+               if ((unit.x !== x || unit.y !== y)
+                     && unit.state !== 'hop') {
+                  map[x][y].unit = undefined;
+               }
+            }
+         }
+      }
+   }
+}
 
 function clearEnemies()
 {
@@ -1155,7 +1178,7 @@ function playerTryHop()
    if (map[to_x][to_y].t !== 0)
       return false;
 
-   if (map[to_x][to_y].unit !== undefined)
+   if (map[to_x][to_y].unit !== undefined && map[to_x][to_y].unit !== 'player')
       return false;
 
    playerChangeState( 'hop' );
@@ -1237,7 +1260,7 @@ function drawEnemy( enemy, x, y )
       if (enemy.facing === 2) dy = ((8 - enemy.lag) * 2);
       if (enemy.facing === 3) dx = -((8 - enemy.lag) * 2);
       if (enemy.facing === 1) dx = ((8 - enemy.lag) * 2);
-      context.drawImage( enemy_swords[enemy.facing], x + dx, y + dy );
+      mimic_context.drawImage( enemy_swords[enemy.facing], x + dx, y + dy );
 
    } else if (enemy.state === 'greedy_kill') {
       // Draw reaching out
@@ -1248,14 +1271,14 @@ function drawEnemy( enemy, x, y )
          if (enemy.facing === 2) dy = ((100 - enemy.lag) * 0.14);
          if (enemy.facing === 3) dx = -((100 - enemy.lag) * 0.14);
          if (enemy.facing === 1) dx = ((100 - enemy.lag) * 0.14);
-         context.drawImage( enemy_hands[enemy.facing], x + dx, y + dy );
+         mimic_context.drawImage( enemy_hands[enemy.facing], x + dx, y + dy );
       }
    }
    // Draw enemy sprite
    if (enemy.facing === undefined || enemy.facing < 0 || enemy.facing > 3)
-      context.drawImage( enemy_images[0], x, y );
+      mimic_context.drawImage( enemy_images[0], x, y );
    else
-      context.drawImage( enemy_images[enemy.facing], x, y );
+      mimic_context.drawImage( enemy_images[enemy.facing], x, y );
 
    if (enemy.state !== 'greedy_kill' && enemy.state !== 'aggro_kill') {
       // Draw vision dots
@@ -1273,10 +1296,10 @@ function drawEnemy( enemy, x, y )
 
          x += dx;
          y += dy;
-         context.beginPath();
-         context.fillStyle = "white";
-         context.arc(x, y, 1.5, 0, 2 * Math.PI, false);
-         context.fill();
+         mimic_context.beginPath();
+         mimic_context.fillStyle = "white";
+         mimic_context.arc(x, y, 1.5, 0, 2 * Math.PI, false);
+         mimic_context.fill();
       }
    }
 }
@@ -1704,7 +1727,8 @@ function respawn()
    spawnEnemies();
    player_x = checkpoint.x;
    player_y = checkpoint.y;
-   player_state = 'idle';
+   hop_index = 0;
+   playerChangeState( 'idle' );
    map[player_x][player_y].unit = 'player';
 
    points = Math.floor( points / 2 );
@@ -1715,35 +1739,44 @@ function respawn()
 // Controls ---
 
 var space_down = false;
+var hop_locked = false;
 
 function onKeyDown( e ) {
    // Accept Space/Shift, and Arrows/ASDF
    if (game_over && !game_complete && e.which === 13) {
       respawn();
-   } else if (player_state !== 'closed' && player_state !== 'hop' && player_state !== 'eating') {
+   } else if (player_state !== 'closed' && player_state !== 'hop' && player_state !== 'eating' && player_lag <= 0) {
       if ( e.which === 32 || e.which === 16 ) {
          space_down = true;
          playerChangeState( 'closed' );
       }
-      else if ( e.which === 38 || e.which === 87 ) {
+      else if ( !hop_locked && ( e.which === 38 || e.which === 87 ) ) {
          // Up
+         hop_locked = true;
          player_facing = 0;
          playerTryHop();
+         hop_locked = false;
       }
-      else if ( e.which === 39 || e.which === 68  ) {
+      else if (!hop_locked && ( e.which === 39 || e.which === 68  ) ) {
          // Right
+         hop_locked = true;
          player_facing = 1;
          playerTryHop();
+         hop_locked = false;
       }
-      else if ( e.which === 40 || e.which === 83 ) {
+      else if (!hop_locked && ( e.which === 40 || e.which === 83 ) ) {
          // Down
+         hop_locked = true;
          player_facing = 2;
          playerTryHop();
+         hop_locked = false;
       }
-      else if ( e.which === 37 || e.which === 65 ) {
+      else if (!hop_locked && ( e.which === 37 || e.which === 65 ) ) {
          // Left
+         hop_locked = true;
          player_facing = 3;
          playerTryHop();
+         hop_locked = false;
       }
       else if (e.which >= 49 && e.which <= 54) {
          warpToCheckpoint( e.which - 48 );
@@ -1761,8 +1794,8 @@ function onKeyUp( e ) {
 $(document).keyup( onKeyUp );
 
 var onClick = function( e ) {
-   var x_pix = e.pageX - canvas.offsetLeft;
-   var y_pix = e.pageY - canvas.offsetTop;
+   var x_pix = e.pageX - mimic_canvas.offsetLeft;
+   var y_pix = e.pageY - mimic_canvas.offsetTop;
 
    if (x_pix > 560 && y_pix < 40)
       toggleMute();
@@ -1775,55 +1808,55 @@ $('#mimic_canvas').click( onClick );
 
 function centerMap()
 {
-   context.restore();
-   context.save();
-   context.translate( -player_offset_x, -player_offset_y );
+   mimic_context.restore();
+   mimic_context.save();
+   mimic_context.translate( -player_offset_x, -player_offset_y );
 }
 
 function drawFloor()
 {
-   context.fillStyle = "gray";
-   context.fillRect( -BLOCK_SIZE, -BLOCK_SIZE, 600 + (BLOCK_SIZE * 2), 600 + (BLOCK_SIZE * 2) );
+   mimic_context.fillStyle = "gray";
+   mimic_context.fillRect( -BLOCK_SIZE, -BLOCK_SIZE, 600 + (BLOCK_SIZE * 2), 600 + (BLOCK_SIZE * 2) );
 }
 
 function drawGui()
 {
-   context.strokeStyle = 'black';
-   context.lineWidth = 2;
+   mimic_context.strokeStyle = 'black';
+   mimic_context.lineWidth = 2;
 
-   context.fillStyle = "rgba(255,204,0,1)";
-   context.font = "32px arial";
-   context.strokeText(points, 8 + player_offset_x, 36 + player_offset_y);
-   context.fillText(points, 8 + player_offset_x, 36 + player_offset_y);
+   mimic_context.fillStyle = "rgba(255,204,0,1)";
+   mimic_context.font = "32px arial";
+   mimic_context.strokeText(points, 8 + player_offset_x, 36 + player_offset_y);
+   mimic_context.fillText(points, 8 + player_offset_x, 36 + player_offset_y);
 
    if (muted)
-      context.drawImage( img_nosound, 565 + player_offset_x, 5 + player_offset_y );
+      mimic_context.drawImage( img_nosound, 565 + player_offset_x, 5 + player_offset_y );
    else
-      context.drawImage( img_sound, 565 + player_offset_x, 5 + player_offset_y );
+      mimic_context.drawImage( img_sound, 565 + player_offset_x, 5 + player_offset_y );
 
    if (music_muted)
-      context.drawImage( img_nomusic, 565 + player_offset_x, 45 + player_offset_y );
+      mimic_context.drawImage( img_nomusic, 565 + player_offset_x, 45 + player_offset_y );
    else
-      context.drawImage( img_music, 565 + player_offset_x, 45 + player_offset_y );
+      mimic_context.drawImage( img_music, 565 + player_offset_x, 45 + player_offset_y );
 
    if (enemies.length > 0) {
-      context.fillStyle = "white";
-      context.font = "18px arial";
+      mimic_context.fillStyle = "white";
+      mimic_context.font = "18px arial";
       var enemy_string = enemies.length + ' adventurers remain';
       var width = enemy_string.width( "18px arial" );
 
-      context.strokeText( enemy_string, 596 - width + player_offset_x, 596 + player_offset_y );
-      context.fillText( enemy_string, 596 - width + player_offset_x, 596 + player_offset_y );
+      mimic_context.strokeText( enemy_string, 596 - width + player_offset_x, 596 + player_offset_y );
+      mimic_context.fillText( enemy_string, 596 - width + player_offset_x, 596 + player_offset_y );
    }
 
    if (game_over && !game_complete) {
-      context.fillStyle = "rgba(205,0,0,1)";
-      fitText( context, "You have been slain", 150, 450, 130, 48, "48px arial", true, true, false );
-      fitText( context, "Press Enter to respawn", 150, 450, 375, 32, "32px arial", true, true, false); 
+      mimic_context.fillStyle = "rgba(205,0,0,1)";
+      fitText( mimic_context, "You have been slain", 150, 450, 130, 48, "48px arial", true, true, false );
+      fitText( mimic_context, "Press Enter to respawn", 150, 450, 375, 32, "32px arial", true, true, false); 
    } else if (game_over && game_complete) {
-      context.fillStyle = "white";
-      fitText( context, "That's the lot of em! Delicious!", 150, 450, 50, 56, "56px arial", true, true, false );
-      fitText( context, "Thanks for playing!", 150, 450, 460, 36, "36px arial", true, true, false );
+      mimic_context.fillStyle = "white";
+      fitText( mimic_context, "That's the lot of em! Delicious!", 150, 450, 50, 56, "56px arial", true, true, false );
+      fitText( mimic_context, "Thanks for playing!", 150, 450, 460, 36, "36px arial", true, true, false );
    }
 }
 
@@ -1839,14 +1872,14 @@ String.prototype.width = function(font) {
   return w;
 }
    
-function fitText( context, text, x_min, x_max, y_min, font_size, font, centered, stroke, first_line_offset )
+function fitText( mimic_context, text, x_min, x_max, y_min, font_size, font, centered, stroke, first_line_offset )
 {
    var text_split = text.split(' ');
    var text_bit = '', text_bit_temp = '';
    var text_width = 0;
    var y = y_min + font_size;
 
-   context.font = font;
+   mimic_context.font = font;
 
    for (var i = 0; i < text_split.length; ++i) {
       text_bit_temp += text_split[i];
@@ -1854,12 +1887,12 @@ function fitText( context, text, x_min, x_max, y_min, font_size, font, centered,
       if (text_width + x_min > x_max) { // Can't add that bit
          if (centered) {
             if (stroke)
-               context.strokeText( text_bit, (x_min + x_max - text_bit.width( font )) / 2 , y );
-            context.fillText( text_bit, (x_min + x_max - text_bit.width( font )) / 2 , y );
+               mimic_context.strokeText( text_bit, (x_min + x_max - text_bit.width( font )) / 2 , y );
+            mimic_context.fillText( text_bit, (x_min + x_max - text_bit.width( font )) / 2 , y );
          } else {
             if (stroke)
-               context.strokeText( text_bit, x_min, y );
-            context.fillText( text_bit, x_min, y );
+               mimic_context.strokeText( text_bit, x_min, y );
+            mimic_context.fillText( text_bit, x_min, y );
          }
 
          text_bit = text_bit_temp = text_split[i] + ' ';
@@ -1872,12 +1905,12 @@ function fitText( context, text, x_min, x_max, y_min, font_size, font, centered,
    if (text_bit) {
       if (centered) {
          if (stroke)
-            context.strokeText( text_bit, (x_min + x_max - text_bit.width( font )) / 2 , y );
-         context.fillText( text_bit, (x_min + x_max - text_bit.width( font )) / 2 , y );
+            mimic_context.strokeText( text_bit, (x_min + x_max - text_bit.width( font )) / 2 , y );
+         mimic_context.fillText( text_bit, (x_min + x_max - text_bit.width( font )) / 2 , y );
       } else {
          if (stroke)
-            context.strokeText( text_bit, x_min, y );
-         context.fillText( text_bit, x_min, y );
+            mimic_context.strokeText( text_bit, x_min, y );
+         mimic_context.fillText( text_bit, x_min, y );
       }
 
       return y;
@@ -1938,11 +1971,18 @@ var update = function( dt ) {
    }
 }
 
+var bug_check = 0;
 var main = function() {
    requestAnimationFrame( main );
 
    update( 17 );
    draw();
+
+   if (bug_check++ > 30) {
+      bug_check = 0;
+
+      checkIntegrity();
+   }
 }
 
 function start() {
